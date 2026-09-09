@@ -65,10 +65,11 @@ class OpenAICompatAdapter:
             content = [{"type": "text", "text": self._prompt(context)},
                        {"type": "image_url",
                         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
-        body = {"model": self._cfg["model"],
-                "messages": [{"role": "user", "content": content}],
-                "temperature": self._cfg["temperature"],
-                "max_tokens": self._cfg["max_output_tokens"]}
+        body: dict[str, Any] = {"model": self._cfg["model"],
+                "messages": [{"role": "user", "content": content}]}
+        if self._cfg.get("temperature") is not None:
+            body["temperature"] = self._cfg["temperature"]
+        body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]
         headers = {"Authorization": f"Bearer {self._key()}"}
         url = self._cfg["base_url"] + "/chat/completions"
         if self._cfg.get("api_version"):
@@ -79,7 +80,10 @@ class OpenAICompatAdapter:
             payload = self._post(url, body, headers)
         else:
             r = httpx.post(url, json=body, headers=headers, timeout=self._cfg["timeout_s"])
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:500]}") from e
             payload = r.json()
         try:
             text = payload["choices"][0]["message"]["content"] or ""

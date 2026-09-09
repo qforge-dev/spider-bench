@@ -38,7 +38,9 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
             "has_key": bool(key_env and os.environ.get(key_env)),
             "key_env": key_env,
             "max_output_tokens": int(cfg.get("max_output_tokens", 50)),
-            "temperature": float(cfg.get("temperature", 0.0)),
+            "temperature": (None if cfg.get("temperature") is None
+                            else float(cfg.get("temperature"))),
+            "token_param": str(cfg.get("token_param", "max_tokens")),
             "price_per_1k_requests": float(cfg.get("price_per_1k_requests", 0.0)),
             "price_input_1k_tokens": float(cfg.get("price_input_1k_tokens", 0.0)),
             "price_output_1k_tokens": float(cfg.get("price_output_1k_tokens", 0.0)),

@@ -209,3 +209,23 @@ def test_leaderboard_sorts_by_top1(tmp_path):
     md, rows = render_leaderboard(collect_runs(tmp_path))
     assert [r["run_id"] for r in rows] == ["r-good", "r-bad"]
     assert "| 1 | r-good |" in md
+
+
+def test_gpt5_params_omit_temperature(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen.update(body)
+        return {"choices": [{"message": {"content": "Aa a"}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    a = OpenAICompatAdapter({"id": "g", "base_url": "https://x/v1", "model": "m",
+                             "key_env": "T_KEY", "temperature": None,
+                             "token_param": "max_completion_tokens",
+                             "max_output_tokens": 50,
+                             "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                             "price_output_1k_tokens": 0.0}, post=fake_post)
+    a.predict(b"", {"candidates": ["Aa a"]})
+    assert "temperature" not in seen and seen["max_completion_tokens"] == 50
