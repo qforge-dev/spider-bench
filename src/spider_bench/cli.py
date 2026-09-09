@@ -442,6 +442,69 @@ def media_select(
         typer.echo(f"wrote {out}")
 
 
+@media_app.command("collect-one")
+def media_collect_one(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    profile: str = typer.Option("research", "--profile"),
+    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
+    download: bool = typer.Option(True, "--download/--no-download"),
+    out: str = typer.Option("data/work/one-per-species.json", "--out"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """One representative image per checklist species: search candidates, download 1 each.
+
+    Metadata-only search first (iNaturalist Poland, licensed, research-grade
+    preferred); species with no candidate are recorded as no_image in the
+    manifest — never silently dropped.
+    """
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.media.collect_one import collect_candidates, record_media_row
+    from spider_bench.media.download import DownloadItem, download_selected
+    from spider_bench.storage.s3 import public_url as _public_url
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    taxa = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa ORDER BY 1").fetchall()]
+    if max_species:
+        taxa = taxa[:max_species]
+    typer.echo(f"collect-one species={len(taxa)} profile={profile} download={download} dry_run={dry_run}")
+    manifest = collect_candidates(taxa, profile=profile, rate_limit=rate_limit)
+    typer.echo(f"candidates={manifest['found']} no_image={manifest['missing']}")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    s3.put_object(Bucket=cfg.aws.bucket, Key=f"{cfg.aws.prefix}work/one-per-species-{date}.json",
+                  Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
+    if dry_run or not download:
+        conn.close()
+        return
+    items = [DownloadItem(url=c["url"], license=c["license"], taxon=c["taxon"],
+                          source="inaturalist", source_media_id=str(c.get("photo_id")))
+             for c in manifest["candidates"]]
+    results = download_selected(items, bucket=cfg.aws.bucket, prefix=cfg.aws.prefix,
+                                region=cfg.aws.region, s3_client=s3, conn=conn)
+    ok = [r for r in results if r.ok]
+    typer.echo(f"downloaded={len(ok)}/{len(results)}")
+    by_url = {c["url"]: c for c in manifest["candidates"]}
+    for r in ok:
+        c = by_url.get(r.url, {})
+        record_media_row(conn, taxon=c.get("taxon", ""), s3_uri=f"s3://{cfg.aws.bucket}/{r.s3_key}",
+                         public_url=_public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
+                         license=c.get("license", ""), creator=c.get("creator"),
+                         attribution=c.get("attribution"), source="inaturalist",
+                         source_media_id=str(c.get("photo_id")),
+                         observation_id=str(c.get("observation_id", "")),
+                         quality_grade="research" if c.get("research_grade") else None,
+                         sha256=r.sha256 or "")
+    n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
+    typer.echo(f"media accepted in db: {n}")
+    conn.close()
+
+
 @media_app.command("download")
 def media_download(
     config: str = typer.Option("configs/poland.yaml", "--config"),
