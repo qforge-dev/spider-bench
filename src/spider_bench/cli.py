@@ -1105,10 +1105,14 @@ def benchmark_leaderboard(
 
     runs = collect_runs(runs_dir)
     md, rows = render_leaderboard(runs)
+    from spider_bench.benchmark.leaderboard import render_page
+
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(md, encoding="utf-8")
     Path(str(out).replace(".md", ".json")).write_text(json.dumps(rows, indent=2), encoding="utf-8")
-    typer.echo(f"runs={len(rows)} wrote={out}")
+    html_path = Path(str(out).replace(".md", ".html"))
+    html_path.write_text(render_page(runs), encoding="utf-8")
+    typer.echo(f"runs={len(rows)} wrote={out} + {html_path}")
 
 
 if __name__ == "__main__":

@@ -271,3 +271,16 @@ def test_parallel_content_deterministic_and_retry(tmp_path):
     import json
     got = sorted(json.loads(line)["task_id"] for line in out.read_text().splitlines())
     assert got == sorted(t["task_id"] for t in tasks)
+
+
+def test_leaderboard_page_has_chart_and_table(tmp_path):
+    import json
+
+    from spider_bench.benchmark.leaderboard import render_page
+
+    runs = [{"run_id": "r1",
+             "manifest": {"model_id": "m", "suite": "s", "estimated_cost_usd": 0.01},
+             "evidence": None,
+             "scores": {"scored": 5, "top1": 0.4, "top5": 0.8, "errors": 0}}]
+    html = render_page(runs)
+    assert "<svg" in html and "0.400" in html and "r1" in html
