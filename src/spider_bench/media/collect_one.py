@@ -36,6 +36,8 @@ class SpeciesCandidate:
     photo_id: int | None = None
     attribution: str | None = None
     research_grade: bool = False
+    country: str | None = None
+    place_guess: str | None = None
 
 
 def _photo_codes(accept: set[str]) -> str:
@@ -51,14 +53,21 @@ def _photo_codes(accept: set[str]) -> str:
 
 
 def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
-                   rate_limit: float = 2.0) -> SpeciesCandidate | None:
-    """Best licensed Poland photo for one species, research-grade first. Pure HTTP."""
+                   rate_limit: float = 2.0, place_id: int | None = PLACE_POLAND_ID) -> SpeciesCandidate | None:
+    """Best licensed photo for one species, research-grade first.
+
+    place_id=None searches worldwide (fallback for species with no Poland
+    photo); observation geography is captured on the candidate either way.
+    Pure HTTP.
+    """
     codes = _photo_codes(accept)
     for grade in ("research", None):
-        params: dict[str, Any] = {"taxon_name": taxon, "place_id": PLACE_POLAND_ID,
+        params: dict[str, Any] = {"taxon_name": taxon,
                                   "photos": "true", "photo_licensed": "true",
                                   "photo_license": codes, "per_page": 10,
                                   "order_by": "votes", "order": "desc"}
+        if place_id is not None:
+            params["place_id"] = place_id
         if grade:
             params["quality_grade"] = grade
         try:
@@ -82,21 +91,24 @@ def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
                     creator=(p.get("user") or user or {}).get("login") or user.get("login"),
                     observer=user.get("login"), observation_id=obs.get("id"), photo_id=p.get("id"),
                     attribution=p.get("attribution"),
-                    research_grade=obs.get("quality_grade") == "research")
+                    research_grade=obs.get("quality_grade") == "research",
+                    country=("PL" if place_id == PLACE_POLAND_ID else None),
+                    place_guess=obs.get("place_guess"))
     return None
 
 
 def collect_candidates(taxa: list[str], profile: str = "research",
                        rate_limit: float = 2.0, limit: int | None = None,
-                       progress_every: int = 50) -> dict[str, Any]:
-    """Metadata-only pass over the checklist. Returns manifest dict."""
+                       progress_every: int = 50,
+                       place_id: int | None = PLACE_POLAND_ID) -> dict[str, Any]:
+    """Metadata-only pass over a species list. place_id=None searches worldwide."""
     accept, _ = load_license_profile(profile)
     names = taxa[:limit] if limit else taxa
     found: list[dict] = []
     missing: list[str] = []
     with httpx.Client() as client:
         for i, name in enumerate(names, 1):
-            cand = pick_candidate(name, accept, client, rate_limit)
+            cand = pick_candidate(name, accept, client, rate_limit, place_id=place_id)
             if cand:
                 found.append(cand.__dict__)
             else:
@@ -188,14 +200,16 @@ def record_media_row(conn: sqlite3.Connection, *, taxon: str, s3_uri: str, publi
                      license: str, creator: str | None, attribution: str | None,
                      source: str, source_media_id: str, sha256: str,
                      observation_id: str | None = None, quality_grade: str | None = None,
+                     country: str | None = "PL", place_guess: str | None = None,
                      width: int | None = None, height: int | None = None) -> None:
     obs_row_id = None
     if observation_id:
         conn.execute(
-            """INSERT INTO observations (source, source_observation_id, source_taxon, quality_grade, country_code)
-               VALUES (?, ?, ?, ?, 'PL')
-               ON CONFLICT(source, source_observation_id) DO UPDATE SET quality_grade=excluded.quality_grade""",
-            (source, str(observation_id), taxon, quality_grade))
+            """INSERT INTO observations (source, source_observation_id, source_taxon, quality_grade, country_code, place_guess)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(source, source_observation_id) DO UPDATE SET quality_grade=excluded.quality_grade,
+                 place_guess=COALESCE(excluded.place_guess, observations.place_guess)""",
+            (source, str(observation_id), taxon, quality_grade, country, place_guess))
         row = conn.execute(
             "SELECT id FROM observations WHERE source=? AND source_observation_id=?",
             (source, str(observation_id))).fetchone()

@@ -451,12 +451,16 @@ def media_collect_one(
     download: bool = typer.Option(True, "--download/--no-download"),
     out: str = typer.Option("data/work/one-per-species.json", "--out"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    scope: str = typer.Option("poland", "--scope", help="poland or worldwide"),
+    only_missing: bool = typer.Option(False, "--only-missing",
+                                      help="restrict to taxa with no accepted image"),
 ) -> None:
     """One representative image per checklist species: search candidates, download 1 each.
 
-    Metadata-only search first (iNaturalist Poland, licensed, research-grade
-    preferred); species with no candidate are recorded as no_image in the
-    manifest — never silently dropped.
+    Scope poland (default) searches iNaturalist Poland; worldwide drops the
+    place filter for species with no Poland photo (observation geography is
+    recorded per image). Species with no candidate are recorded as no_image
+    in the manifest — never silently dropped.
     """
     from spider_bench.db import ensure_migrated as _migrated
     from spider_bench.db import get_connection as _connect
@@ -467,17 +471,29 @@ def media_collect_one(
     cfg = _cfg(config)
     conn = _connect(cfg.local_.sqlite_path)
     _migrated(conn)
-    taxa = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa ORDER BY 1").fetchall()]
+    if only_missing:
+        have = {r[0] for r in conn.execute(
+            """SELECT DISTINCT o.source_taxon FROM media m
+               JOIN observations o ON o.id = m.observation_id
+               WHERE m.validation_status='accepted' AND o.source_taxon IS NOT NULL""").fetchall()}
+        taxa = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa ORDER BY 1").fetchall()
+                if r[0] not in have]
+    else:
+        taxa = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa ORDER BY 1").fetchall()]
     if max_species:
         taxa = taxa[:max_species]
-    typer.echo(f"collect-one species={len(taxa)} profile={profile} download={download} dry_run={dry_run}")
-    manifest = collect_candidates(taxa, profile=profile, rate_limit=rate_limit)
+    if scope not in ("poland", "worldwide"):
+        raise typer.BadParameter("--scope must be poland or worldwide")
+    place_id = 7800 if scope == "poland" else None
+    typer.echo(f"collect-one scope={scope} species={len(taxa)} profile={profile} download={download} dry_run={dry_run}")
+    manifest = collect_candidates(taxa, profile=profile, rate_limit=rate_limit, place_id=place_id)
+    manifest["scope"] = scope
     typer.echo(f"candidates={manifest['found']} no_image={manifest['missing']}")
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     s3 = s3mod.s3_client(cfg.aws.region)
     date = __import__("datetime").date.today().isoformat()
-    s3.put_object(Bucket=cfg.aws.bucket, Key=f"{cfg.aws.prefix}work/one-per-species-{date}.json",
+    s3.put_object(Bucket=cfg.aws.bucket, Key=f"{cfg.aws.prefix}work/one-per-species-{scope}-{date}.json",
                   Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
     if dry_run or not download:
         conn.close()
@@ -499,6 +515,8 @@ def media_collect_one(
                          source_media_id=str(c.get("photo_id")),
                          observation_id=str(c.get("observation_id", "")),
                          quality_grade="research" if c.get("research_grade") else None,
+                         country=c.get("country") or ("PL" if scope == "poland" else None),
+                         place_guess=c.get("place_guess"),
                          sha256=r.sha256 or "")
     n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
     typer.echo(f"media accepted in db: {n}")
