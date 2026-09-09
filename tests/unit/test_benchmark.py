@@ -362,3 +362,27 @@ def test_system_message_holds_candidates(monkeypatch):
     sys_msg, user_msg = seen["messages"]
     assert sys_msg["role"] == "system" and "Aa a" in sys_msg["content"] and "Bb b" in sys_msg["content"]
     assert user_msg["role"] == "user" and "Aa a" not in str(user_msg)
+
+
+def test_bedrock_adapter_converse_shape_and_usage():
+    from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+    seen = {}
+
+    class FakeBedrock:
+        def converse(self, **kwargs):
+            seen.update(kwargs)
+            assert kwargs["modelId"] == "fable"
+            assert kwargs["system"][0]["text"].startswith("Pick")
+            assert kwargs["messages"][0]["content"][1]["image"]["format"] == "jpeg"
+            return {"output": {"message": {"content": [{"text": "Bb b"}]}},
+                    "usage": {"inputTokens": 50, "outputTokens": 5}}
+
+    a = BedrockAdapter({"id": "fable", "model": "fable", "region": "us-east-1",
+                        "max_output_tokens": 100,
+                        "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                        "price_output_1k_tokens": 0.0}, client=FakeBedrock())
+    preds = a.predict(b"\xff\xd8\xff" + b"0" * 10,
+                      {"candidates": ["Aa a", "Bb b"], "prompt": "Pick one."})
+    assert preds[0] == {"taxon": "Bb b", "score": 1.0, "matched": True, "raw": "Bb b"}
+    assert a.totals["input_tokens"] == 50 and a.estimated_cost() == 0.0

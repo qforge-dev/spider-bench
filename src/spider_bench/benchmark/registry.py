@@ -47,6 +47,7 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
                                                     cfg.get("price_input_1k_tokens", 0.0))),
             "price_output_1k_tokens": float(cfg.get("price_output_1k_tokens", 0.0)),
             "timeout_s": float(cfg.get("timeout_s", 120)),
+            "region": os.environ.get(cfg.get("region_env", ""), "") or cfg.get("region", "us-east-1"),
             "api_version": str(cfg.get("api_version", "") or ""),
             "notes": cfg.get("notes", ""), "file": cfg.get("_file", "")}
 

@@ -907,14 +907,21 @@ def benchmark_run(
     run_id, out_path = _run_predictions(run_id, out, model)
     manifest_extra: dict = {"suite": suite, "run_id": run_id}
     if model not in adapters:
-        from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
         from spider_bench.benchmark.registry import load_registry, resolve_model
 
         reg = load_registry(registry)
         if model not in reg:
             raise typer.BadParameter(f"unknown model '{model}'; registry has {sorted(reg)}")
         resolved = resolve_model(reg[model])  # raises if key env missing; never logs the key
-        adapters[model] = OpenAICompatAdapter(resolved)
+        kind = resolved.get("adapter", "openai-compatible")
+        if kind == "bedrock-converse":
+            from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+            adapters[model] = BedrockAdapter(resolved)
+        else:
+            from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+
+            adapters[model] = OpenAICompatAdapter(resolved)
         manifest_extra["pricing_usd"] = {
             "per_1k_requests": resolved["price_per_1k_requests"],
             "input_1k_tokens": resolved["price_input_1k_tokens"],
