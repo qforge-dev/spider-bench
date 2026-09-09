@@ -438,3 +438,14 @@ def test_structured_flag_gates_both_adapters(monkeypatch):
                         "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
                         "price_output_1k_tokens": 0.0}, client=FakeBedrock())
     assert c.predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})[0]["taxon"] == "Aa a"
+
+
+def test_tag_content_wins_over_prose():
+    from spider_bench.benchmark.api_adapter import match_candidate
+
+    cands = ["Aa a", "Bb b"]
+    assert match_candidate("Bb b", cands) == ("Bb b", True)
+    prose = ("Long reasoning about Aa a here. "
+             "<SPIDER_NAME>Bb b</SPIDER_NAME> trailing words")
+    assert match_candidate(prose, cands) == ("Bb b", True)
+    assert match_candidate("no tags at all", cands)[1] is False

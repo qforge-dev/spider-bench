@@ -16,6 +16,10 @@ def _norm(name: str) -> str:
     return " ".join(str(name or "").strip().lower().split())
 
 
+TAG_RE = re.compile(r"<\s*spider_name\s*>(.*?)<\s*/\s*spider_name\s*>",
+                      re.IGNORECASE | re.DOTALL)
+
+
 def match_candidate(text: str, candidates: list[str]) -> tuple[str, bool]:
     """Match free-text reply to a candidate. Returns (taxon, matched).
 
@@ -24,6 +28,9 @@ def match_candidate(text: str, candidates: list[str]) -> tuple[str, bool]:
     LAST match — conclusions come after reasoning. Single-name replies
     behave exactly as before.
     """
+    tagged = TAG_RE.findall(text or "")
+    if tagged:
+        text = tagged[-1]  # conclusions come last; ignore everything outside tags
     normed = {_norm(c): c for c in candidates}
     lines = (text or "").strip().splitlines() or [""]
     found: str | None = None
@@ -90,7 +97,8 @@ class OpenAICompatAdapter:
         # cache it (candidate list ~5k tokens). Per-image content stays in user.
         system_text = self._system_prompt(context)
         user_text = ("Identify the spider in this photograph. "
-                     "Reply with exactly one scientific name from the candidate list.")
+                     "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
+                     "scientific name from the candidate list, and nothing outside the tags.")
         if context.get("image_public_url"):
             user_content: list[dict[str, Any]] = [
                 {"type": "text", "text": user_text},

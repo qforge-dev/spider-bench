@@ -54,8 +54,8 @@ class BedrockAdapter:
         system_text = ((context.get("prompt") or "Identify the spider species in this photograph.")
                        + f" Valid answers ({len(cands)}): " + "; ".join(cands))
         user_text = ("Identify the spider in this photograph. "
-                     "Reply with ONLY the scientific name and nothing else. "
-                     "No reasoning, no description, no punctuation around it.")
+                     "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
+                     "scientific name from the candidate list, and nothing outside the tags.")
         schema = {
             "type": "object",
             "properties": {"species": {

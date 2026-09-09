@@ -10,7 +10,7 @@ api_key_env: AZURE_OPENAI_API_KEY
 model_env: AZURE_OPENAI_DEPLOYMENT
 model: your-deployment-name         # <-- must equal the deployment name
 api_version: "2024-10-21"           # <-- set a version your resource supports
-structured_output: true
+structured_output: false
 max_output_tokens: 2000
 temperature: 0.0
 price_per_1k_requests: 0.01         # <-- fill from your Azure pricing
