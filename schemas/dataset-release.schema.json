@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/spider-bench/schemas/dataset-release.schema.json",
+  "title": "DatasetRelease",
+  "description": "Immutable versioned dataset release manifest references.",
+  "type": "object",
+  "required": ["version", "configHash", "taxonomySnapshot", "licenseProfile", "s3Prefix", "status"],
+  "properties": {
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "configHash": { "type": "string", "minLength": 1 },
+    "taxonomySnapshot": { "type": "string", "minLength": 1 },
+    "sourceSnapshots": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "licenseProfile": { "type": "string", "minLength": 1 },
+    "manifestChecksums": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+      "default": {}
+    },
+    "s3Prefix": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "candidate", "published", "deprecated"]
+    }
+  },
+  "additionalProperties": false
+}

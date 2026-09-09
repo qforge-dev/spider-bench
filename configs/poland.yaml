@@ -1,0 +1,24 @@
+# Country config: Poland. S3-native, bucket shared across countries via prefix.
+country: PL
+country_prefix: poland
+
+aws:
+  region: us-east-1
+  bucket: spiders-dataset-088543363904
+  # all dataset objects live under this prefix; change per country
+  prefix: poland/
+  public_base_url: https://spiders-dataset-088543363904.s3.us-east-1.amazonaws.com/poland
+
+local:
+  work_dir: data/work
+  sqlite_path: data/work/spider-bench.sqlite
+
+collection:
+  license_profile: research
+  max_records: 1000
+  concurrency: 4
+  rate_limit_per_sec: 2.0
+
+sources:
+  primary_checklist: null  # TODO Milestone 0 decision
+  taxonomy_snapshot: null  # pinned WSC snapshot id

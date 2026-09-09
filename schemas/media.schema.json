@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/spider-bench/schemas/media.schema.json",
+  "title": "Media",
+  "description": "Image metadata with taxon association, validation state, checksums and durable S3 object references. No image bytes stored locally.",
+  "type": "object",
+  "required": ["source", "sourceMediaId", "s3Uri", "license", "validationStatus"],
+  "properties": {
+    "source": { "type": "string", "minLength": 1 },
+    "sourceMediaId": { "type": "string", "minLength": 1 },
+    "observationId": { "type": ["integer", "null"] },
+    "s3Uri": { "type": "string", "pattern": "^s3://[^/]+/.+" },
+    "publicUrl": { "type": ["string", "null"], "format": "uri" },
+    "creator": { "type": ["string", "null"] },
+    "license": { "type": "string", "minLength": 1 },
+    "licenseUrl": { "type": ["string", "null"], "format": "uri" },
+    "attribution": { "type": ["string", "null"] },
+    "mimeType": { "type": ["string", "null"] },
+    "width": { "type": ["integer", "null"], "minimum": 1 },
+    "height": { "type": ["integer", "null"], "minimum": 1 },
+    "sha256": { "type": ["string", "null"], "pattern": "^([0-9a-fA-F]{64})?$" },
+    "validationStatus": {
+      "type": "string",
+      "enum": ["pending", "accepted", "rejected", "needs_review"]
+    },
+    "rejectionReason": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,30 @@
+{
+  "key": 987654321,
+  "datasetKey": "040c5662-da76-4782-a48e-c276255d6bfd",
+  "publishingOrgKey": "28eb1a3f-1c15-4a95-931a-4af90f123456",
+  "datasetName": "iNaturalist research-grade observations (republished fixture)",
+  "publisher": "iNaturalist",
+  "scientificName": "Araneus diadematus (Clerck, 1757)",
+  "taxonKey": 2180531,
+  "country": "PL",
+  "eventDate": "2025-07-01T10:00:00",
+  "basisOfRecord": "HUMAN_OBSERVATION",
+  "occurrenceID": "https://www.inaturalist.org/observations/123456789",
+  "references": "https://www.inaturalist.org/observations/123456789",
+  "institutionCode": "iNaturalist",
+  "collectionCode": "Observations",
+  "catalogNumber": "123456789",
+  "license": "CC_BY_NC_4_0",
+  "rightsHolder": "fixture_observer",
+  "media": [
+    {
+      "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/original.jpg",
+      "format": "image/jpeg",
+      "type": "StillImage",
+      "creator": "fixture_observer",
+      "license": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "rightsHolder": "fixture_observer",
+      "references": "https://www.inaturalist.org/photos/111"
+    }
+  ]
+}

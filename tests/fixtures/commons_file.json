@@ -1,0 +1,30 @@
+{
+  "pageid": 7654321,
+  "ns": 6,
+  "title": "File:Araneus diadematus (fixture).jpg",
+  "lastrevid": 100200300,
+  "categories": [{"title": "Category:Araneus diadematus"}, {"title": "Category:Spiders of Poland"}],
+  "templates": [{"title": "Template:CC-BY-SA-4.0"}, {"title": "Template:GFDL"}],
+  "imageinfo": [
+    {
+      "timestamp": "2024-05-01T08:00:00Z",
+      "user": "FixtureUploader",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/f/f1/Araneus_diadematus_%28fixture%29.jpg",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Araneus_diadematus_(fixture).jpg",
+      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=7654321",
+      "size": 123456,
+      "width": 1200,
+      "height": 800,
+      "sha1": "abc123def456abc123def456abc123def456abc1",
+      "mime": "image/jpeg",
+      "revid": 100200300,
+      "extmetadata": {
+        "Artist": {"value": "<a href=\"//commons.wikimedia.org/wiki/User:FixtureUploader\">Fixture Uploader</a>"},
+        "Credit": {"value": "Fixture Uploader / Wikimedia Commons"},
+        "LicenseShortName": {"value": "CC BY-SA 4.0, GFDL"},
+        "LicenseUrl": {"value": "https://creativecommons.org/licenses/by-sa/4.0/"},
+        "UsageTerms": {"value": "Dual licensed under CC BY-SA 4.0 and GFDL (multi-license fixture)"}
+      }
+    }
+  ]
+}

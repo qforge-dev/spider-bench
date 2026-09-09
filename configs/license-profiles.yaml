@@ -1,0 +1,12 @@
+# License profiles — versioned, stored with release.
+version: 1
+
+profiles:
+  conservative:
+    description: CC0 + CC BY only
+    accept: ["CC0-1.0", "CC-BY-4.0", "CC-BY-3.0"]
+    review_required: []
+  research:
+    description: conservative + non-commercial, SA needs documented decision
+    accept: ["CC0-1.0", "CC-BY-4.0", "CC-BY-3.0", "CC-BY-NC-4.0", "CC-BY-NC-3.0"]
+    review_required: ["CC-BY-SA-4.0", "CC-BY-NC-SA-4.0", "CC-BY-SA-3.0", "CC-BY-NC-SA-3.0"]

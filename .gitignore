@@ -1,0 +1,21 @@
+# ---> generated / machine-managed dirs
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+# ---> python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+# ---> aws / secrets
+.aws/
+*.pem
+# ---> os
+.DS_Store
+# ---> caches
+.pytest_cache/
+.ruff_cache/

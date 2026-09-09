@@ -1,0 +1,46 @@
+{
+  "id": 123456789,
+  "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "observed_on": "2025-06-14",
+  "observed_on_string": "2025-06-14",
+  "created_at": "2025-06-14T10:00:00+02:00",
+  "updated_at": "2025-06-16T12:00:00+02:00",
+  "quality_grade": "research",
+  "captive": false,
+  "license_code": "CC-BY-NC",
+  "description": "Sanitized fixture: spider on leaf, Poland.",
+  "uri": "https://www.inaturalist.org/observations/123456789",
+  "geoprivacy": "open",
+  "coordinates_obscured": false,
+  "positional_accuracy": 25,
+  "latitude": 52.2297,
+  "longitude": 21.0122,
+  "place_guess": "Warszawa, Poland",
+  "geojson": {"type": "Point", "coordinates": [21.0122, 52.2297]},
+  "user": {"id": 4242, "login": "fixture_observer", "name": "Fixture Observer"},
+  "taxon": {"id": 47118, "name": "Araneae", "rank": "order", "preferred_common_name": "Spiders"},
+  "photos": [
+    {
+      "id": 111,
+      "license_code": "CC-BY-NC",
+      "attribution": "(c) fixture_observer, some rights reserved (CC BY-NC)",
+      "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/square.jpg",
+      "original_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/original.jpg",
+      "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/large.jpg",
+      "medium_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/medium.jpg",
+      "small_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111/small.jpg",
+      "user": {"id": 4242, "login": "fixture_observer"}
+    },
+    {
+      "id": 112,
+      "license_code": "CC-BY-NC",
+      "attribution": "(c) fixture_observer, some rights reserved (CC BY-NC)",
+      "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/112/square.jpg",
+      "original_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/112/original.jpg",
+      "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/112/large.jpg",
+      "medium_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/112/medium.jpg",
+      "small_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/112/small.jpg",
+      "user": {"id": 4242, "login": "fixture_observer"}
+    }
+  ]
+}

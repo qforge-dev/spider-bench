@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/spider-bench/schemas/taxon.schema.json",
+  "title": "Taxon",
+  "description": "Accepted spider taxon reconciled to a pinned World Spider Catalog snapshot, plus Polish membership status.",
+  "type": "object",
+  "required": ["scientificName", "rank", "snapshotId", "taxonomicStatus"],
+  "properties": {
+    "scientificName": { "type": "string", "minLength": 1 },
+    "authorship": { "type": ["string", "null"] },
+    "rank": {
+      "type": "string",
+      "enum": ["order", "family", "genus", "species", "subspecies", "variety"]
+    },
+    "family": { "type": ["string", "null"] },
+    "genus": { "type": ["string", "null"] },
+    "wscId": { "type": ["string", "null"] },
+    "snapshotId": { "type": "string", "minLength": 1 },
+    "taxonomicStatus": {
+      "type": "string",
+      "enum": ["accepted", "synonym", "doubtful", "disputed"]
+    },
+    "synonyms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "countryMembership": {
+      "type": "object",
+      "required": ["countryCode", "status"],
+      "properties": {
+        "countryCode": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "status": {
+          "type": "string",
+          "enum": ["present", "doubtful", "disputed", "historical", "introduced", "uncertain", "absent"]
+        },
+        "supportingSource": { "type": ["string", "null"] },
+        "reviewState": {
+          "type": "string",
+          "enum": ["unreviewed", "pending", "approved", "rejected"]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
