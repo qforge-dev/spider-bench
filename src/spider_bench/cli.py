@@ -30,6 +30,10 @@ app.add_typer(release_app, name="release")
 app.add_typer(benchmark_app, name="benchmark")
 
 
+def _cfg(config: str):
+    return load_country_config(config)
+
+
 def _suite_tasks(suite: str, tasks: str | None) -> Path:
     """Explicit --tasks wins; otherwise <suite>/query/tasks.jsonl, then <suite>/tasks.jsonl."""
     if tasks:
