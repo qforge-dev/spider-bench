@@ -21,6 +21,9 @@ dev = [
   "pytest>=8.0",
   "ruff>=0.4",
 ]
+app = [
+  "flask>=3.0",
+]
 
 [project.scripts]
 spider-bench = "spider_bench.cli:app"

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ taxon.taxon }} — Polish spiders</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<p><a href="{{ url_for('index') }}">← all spiders</a></p>
+<h1><i>{{ taxon.taxon }}</i> <small>{{ taxon.authorship }}</small></h1>
+<p>Family {{ taxon.family }} · genus {{ taxon.genus }}</p>
+{% if media %}
+<figure><img src="{{ media.public_url }}" alt="{{ taxon.taxon }}" style="max-width:640px">
+<figcaption>{{ attribution.attribution or '' }} License: {{ media.license }}{% if photo_page %} · <a href="{{ photo_page }}">source photo</a>{% endif %}</figcaption></figure>
+{% else %}
+<p><strong>No acceptable licensed image found in Poland.</strong> Recorded as <code>no_image</code> in the dataset.</p>
+{% endif %}
+<h2>Medical significance (Poland)</h2>
+{% if danger %}
+<p><strong>{{ danger.category }}</strong> · {{ danger.geographic_scope }} · status {{ danger.status }}</p>
+<p>{{ danger.rationale }}</p>
+<p><small>Reviewer {{ danger.reviewer }}, {{ danger.review_date }}. Evidence: {{ danger.evidence_ids }}. Not medical advice — seek care when symptoms are severe or uncertain.</small></p>
+{% else %}
+<p>Not yet assessed — no invented rating. See dataset releases for review status.</p>
+{% endif %}
+</body>
+</html>
