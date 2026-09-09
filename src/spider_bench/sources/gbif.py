@@ -28,7 +28,7 @@ DOWNLOAD_REQUEST = f"{BASE_URL}/occurrence/download/request"
 DOWNLOAD_GET = f"{BASE_URL}/occurrence/download"
 
 COUNTRY_POLAND = "PL"
-TAXON_ARANEAE_KEY = 736  # GBIF backbone usageKey for order Araneae
+TAXON_ARANEAE_KEY = 1496  # GBIF backbone orderKey for order Araneae
 
 
 def snapshot_today() -> str:

@@ -93,7 +93,10 @@ def doctor(config: str = typer.Option("configs/poland.yaml", "--config")) -> Non
     typer.echo(f"sts={sts_ok} versioning={versioning} encryption={encryption} policy={policy_ok}")
 
 
-# ---- taxonomy (owned by taxonomy worker; thin stubs) ----
+# ---- taxonomy (real: araneae PL checklist + WSC/LSID snapshot) ----
+
+ARANEAE_PL_CSV = "https://araneae.nmbe.ch/biodiversity/countrylist/export?code=PL&type=csv"
+
 
 @taxonomy_app.command("collect")
 def taxonomy_collect(
@@ -103,47 +106,89 @@ def taxonomy_collect(
     max_records: int = typer.Option(1000, "--max-records"),
     resume: bool = typer.Option(False, "--resume"),
     concurrency: int = typer.Option(4, "--concurrency"),
+    input: Optional[str] = typer.Option(None, "--input", help="Local checklist CSV (default: download araneae PL export)"),
+    snapshot: str = typer.Option("araneae-09.2026", "--snapshot"),
 ) -> None:
-    """Ingest versioned checklist inputs (delegates to taxonomy worker module)."""
-    typer.echo(
-        f"taxonomy collect country={country} dry_run={dry_run} "
-        f"max_records={max_records} resume={resume} concurrency={concurrency}"
-    )
+    """Ingest versioned Polish checklist + taxonomy snapshot (idempotent, resumable)."""
+    import csv as _csv
+
+    import httpx as _httpx
+
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.sources.polish_checklist import ingest_checklist as _ingest_chk
+    from spider_bench.sources.world_spider_catalog import ingest_wsc as _ingest_wsc
+
+    cfg = _cfg(config)
+    typer.echo(f"taxonomy collect country={country} snapshot={snapshot} dry_run={dry_run}")
+    if input:
+        raw = Path(input).read_bytes()
+    else:
+        r = _httpx.get(ARANEAE_PL_CSV, timeout=60, follow_redirects=True)
+        r.raise_for_status()
+        raw = r.content
+    text = raw.decode("utf-8-sig", errors="replace")
+    rows = list(_csv.DictReader(text.splitlines()))[:max_records]
+    typer.echo(f"fetched {len(rows)} checklist rows")
     if dry_run:
         return
-    try:
-        from spider_bench.taxonomy import reconcile as _  # noqa: F401
-    except ImportError:
-        typer.echo("taxonomy module not yet implemented by taxonomy worker; recorded intent only.")
+    # raw snapshot to S3 (versioned, never overwritten)
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    key = s3mod.raw_metadata_key(cfg.aws.prefix, "araneae", snapshot, f"poland-{len(rows)}.csv")
+    if not resume or not s3mod.key_exists(s3, cfg.aws.bucket, key):
+        s3.put_object(Bucket=cfg.aws.bucket, Key=key, Body=raw, ContentType="text/csv")
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    wsc_rows = [{"scientific_name": f"{r['Genus']} {r['Species']}", "authorship": r.get("Author"),
+                 "rank": "species", "family": r.get("Family"), "genus": r.get("Genus"),
+                 "wsc_id": r.get("LSID"), "taxonomic_status": "accepted"} for r in rows if r.get("Genus")]
+    typer.echo(f"wsc: {_ingest_wsc(conn, wsc_rows, snapshot_id=snapshot)}")
+    chk = [{"original_name": f"{r['Genus']} {r['Species']}", "authorship": r.get("Author"),
+            "membership_status": "present",
+            "notes": f"araneae species_id={r.get('species_id')} lsid={r.get('LSID')}"} for r in rows if r.get("Genus")]
+    typer.echo(f"checklist: {_ingest_chk(conn, chk, source='araneae-poland', version=snapshot, citation='Nentwig et al. Spiders of Europe doi:10.24436/1', retrieval_date=date, raw_s3_uri=f's3://{cfg.aws.bucket}/{key}')}")
+    conn.close()
 
 
 @taxonomy_app.command("reconcile")
 def taxonomy_reconcile(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    out: str = typer.Option("data/work/reports/taxonomy-conflicts.json", "--out"),
 ) -> None:
-    typer.echo(f"taxonomy reconcile dry_run={dry_run}")
+    """Reconcile checklist names to the pinned snapshot; write conflict report."""
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.taxonomy.reconcile import conflict_report as _report
+    from spider_bench.taxonomy.reconcile import reconcile_all as _reconcile
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    taxa = [{"scientific_name": r[0], "authorship": r[1]}
+            for r in conn.execute("SELECT scientific_name, authorship FROM taxa").fetchall()]
+    entries = [{"original_name": r[0]} for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa").fetchall()]
+    results = _reconcile(entries, taxa)
+    report = _report(results)
+    typer.echo(f"reconciled {len(results)}: {report.get('counts', {})} needs_review={report.get('needs_review', 0)}")
     if dry_run:
         return
-    try:
-        from spider_bench.taxonomy import reconcile  # noqa
-
-        typer.echo("taxonomy reconcile delegated.")
-    except ImportError:
-        typer.echo("taxonomy module not yet implemented; recorded intent only.")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    typer.echo(f"wrote {out}")
+    conn.close()
 
 
-# ---- discover (sources worker stubs) ----
+# ---- discover (real, metadata-only; image bytes never fetched here) ----
 
-def _discover(source: str, country: str, max_records: int, resume: bool,
-              concurrency: int, dry_run: bool) -> None:
-    typer.echo(
-        f"discover {source} country={country} max_records={max_records} "
-        f"resume={resume} concurrency={concurrency} dry_run={dry_run}"
-    )
-    if dry_run:
-        return
-    typer.echo(f"{source} discovery delegated to sources worker module (metadata-only first).")
+def _load_resume(path: Path) -> dict:
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
 
 
 @discover_app.command("inaturalist")
@@ -154,8 +199,36 @@ def discover_inat(
     resume: bool = typer.Option(False, "--resume"),
     concurrency: int = typer.Option(4, "--concurrency"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
 ) -> None:
-    _discover("inaturalist", country, max_records, resume, concurrency, dry_run)
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.sources.inaturalist import (
+        discover_observations_sync as _discover,
+    )
+    from spider_bench.sources.inaturalist import (
+        insert_observations_idempotent as _insert,
+    )
+    from spider_bench.sources.inaturalist import (
+        upload_raw_jsonl_to_s3 as _upload,
+    )
+
+    cfg = _cfg(config)
+    cursor_path = Path(f"data/work/cursors/inaturalist-{country}.json")
+    cursor = _load_resume(cursor_path) if resume else {}
+    records, nxt = _discover(max_records=max_records, resume=cursor or None, rate_limit=rate_limit, dry_run=dry_run)
+    typer.echo(f"inaturalist country={country} fetched={len(records)} dry_run={dry_run}")
+    if dry_run:
+        return
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    _upload(s3, cfg.aws.bucket, cfg.aws.prefix, "inaturalist", date, records)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    typer.echo(f"inserted: {_insert(conn, records)}")
+    conn.close()
+    cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    cursor_path.write_text(json.dumps(nxt), encoding="utf-8")
 
 
 @discover_app.command("gbif")
@@ -166,8 +239,32 @@ def discover_gbif(
     resume: bool = typer.Option(False, "--resume"),
     concurrency: int = typer.Option(4, "--concurrency"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
 ) -> None:
-    _discover("gbif", country, max_records, resume, concurrency, dry_run)
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.sources.gbif import discover_occurrences_sync as _discover
+    from spider_bench.sources.gbif import insert_occurrences_idempotent as _insert
+    from spider_bench.sources.gbif import upload_raw_jsonl_to_s3 as _upload
+
+    cfg = _cfg(config)
+    cursor_path = Path(f"data/work/cursors/gbif-{country}.json")
+    cursor = _load_resume(cursor_path) if resume else {}
+    records, nxt = _discover(country_code=country, max_records=max_records,
+                             offset=cursor.get("offset", 0) if cursor else 0,
+                             rate_limit=rate_limit, dry_run=dry_run)
+    typer.echo(f"gbif country={country} fetched={len(records)} dry_run={dry_run}")
+    if dry_run:
+        return
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    _upload(s3, cfg.aws.bucket, cfg.aws.prefix, "gbif", date, records)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    typer.echo(f"inserted: {_insert(conn, records)}")
+    conn.close()
+    cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    cursor_path.write_text(json.dumps(nxt), encoding="utf-8")
 
 
 @discover_app.command("commons")
@@ -178,8 +275,32 @@ def discover_commons(
     resume: bool = typer.Option(False, "--resume"),
     concurrency: int = typer.Option(4, "--concurrency"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
+    query: str = typer.Option("spider Poland", "--query"),
 ) -> None:
-    _discover("commons", country, max_records, resume, concurrency, dry_run)
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.sources.commons import discover_files_sync as _discover
+    from spider_bench.sources.commons import insert_files_idempotent as _insert
+    from spider_bench.sources.commons import upload_raw_jsonl_to_s3 as _upload
+
+    cfg = _cfg(config)
+    cursor_path = Path(f"data/work/cursors/commons-{country}.json")
+    cursor = _load_resume(cursor_path) if resume else {}
+    records, nxt = _discover(query=query, max_records=max_records,
+                             resume=cursor or None, rate_limit=rate_limit, dry_run=dry_run)
+    typer.echo(f"commons query={query!r} fetched={len(records)} dry_run={dry_run}")
+    if dry_run:
+        return
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    _upload(s3, cfg.aws.bucket, cfg.aws.prefix, "commons", date, records)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    typer.echo(f"inserted: {_insert(conn, records)}")
+    conn.close()
+    cursor_path.parent.mkdir(parents=True, exist_ok=True)
+    cursor_path.write_text(json.dumps(nxt), encoding="utf-8")
 
 
 # ---- audit ----
@@ -189,11 +310,77 @@ def audit_coverage(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     out: str = typer.Option("data/work/reports/coverage.json", "--out"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    upload: bool = typer.Option(True, "--upload/--no-upload"),
 ) -> None:
-    typer.echo(f"audit coverage out={out} dry_run={dry_run}")
+    """Per-taxon image coverage: every checklist species flagged has_image true/false.
+
+    has_image=false rows are the explicit no-image pointer required by §2.1
+    (stored in the report + uploaded to S3, never silently dropped).
+    """
+    import httpx as _httpx
+
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    checklist = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa").fetchall()]
+    conn.close()
+    typer.echo(f"checklist species: {len(checklist)} dry_run={dry_run}")
+    # metadata-only: iNat species_counts (licensed-agnostic) + GBIF still-image facet
+    inat_counts: dict[str, int] = {}
+    try:
+        page = 1
+        while True:
+            r = _httpx.get("https://api.inaturalist.org/v1/observations/species_counts",
+                           params={"place_id": 7800, "taxon_id": 47118, "per_page": 500, "page": page},
+                           timeout=30).json()
+            res = r.get("results", [])
+            if not res:
+                break
+            for t in res:
+                inat_counts[t.get("taxon", {}).get("name", "")] = t.get("count", 0)
+            if len(res) < 500:
+                break
+            page += 1
+    except Exception as e:  # noqa: BLE001
+        typer.echo(f"inat species_counts failed: {e}")
+    gbif_species_with_images = 0
+    try:
+        r = _httpx.get("https://api.gbif.org/v1/occurrence/search",
+                       params={"country": "PL", "order_key": 1496, "media_type": "StillImage",
+                               "limit": 0, "facet": "speciesKey", "facetLimit": 2000},
+                       timeout=60).json()
+        # facet gives keys, not names; resolve via species API in bulk is costly —
+        # record count + mark coverage at aggregate level; per-taxon GBIF check
+        # happens in media select via occurrence lookup.
+        facets = (r.get("facets") or [{}])[0].get("counts", [])
+        gbif_species_with_images = len(facets)
+        typer.echo(f"gbif PL still-image occurrences={r.get('count')} species={gbif_species_with_images}")
+    except Exception as e:  # noqa: BLE001
+        typer.echo(f"gbif facet failed: {e}")
+    rows = [{"taxon": name,
+             "inat_poland_obs": inat_counts.get(name, 0),
+             "has_image_candidate": bool(inat_counts.get(name, 0)),
+             "image_status": "candidate" if inat_counts.get(name, 0) else "no_image"}
+            for name in sorted(checklist)]
+    no_image = [r for r in rows if not r["has_image_candidate"]]
+    report = {"species_total": len(rows), "with_candidates": len(rows) - len(no_image),
+              "no_image": len(no_image), "no_image_taxa": [r["taxon"] for r in no_image], "rows": rows}
+    typer.echo(f"with_candidates={report['with_candidates']} no_image={report['no_image']}")
     if dry_run:
         return
-    typer.echo("coverage audit delegated (taxonomy+discovery stats).")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if upload:
+        s3 = s3mod.s3_client(cfg.aws.region)
+        date = __import__("datetime").date.today().isoformat()
+        key = f"{cfg.aws.prefix}work/reports/coverage-{date}.json"
+        s3.put_object(Bucket=cfg.aws.bucket, Key=key,
+                      Body=json.dumps(report, indent=2).encode(), ContentType="application/json")
+        typer.echo(f"uploaded s3://{cfg.aws.bucket}/{key}")
+    typer.echo(f"wrote {out}")
 
 
 @audit_app.command("licenses")
