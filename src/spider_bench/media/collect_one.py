@@ -52,6 +52,20 @@ def _photo_codes(accept: set[str]) -> str:
     return ",".join(sorted(out)) or "cc0,cc-by,cc-by-nc"
 
 
+def _large_photo_url(url: str) -> str:
+    """iNat serves size variants by path token; API hands us 75px squares.
+
+    Upgrade square/small/medium to large (~1024px): plenty for classification,
+    far lighter than originals. Non-iNat URLs pass through untouched.
+    """
+    if "inaturalist" not in url:
+        return url
+    for small in ("/square.", "/small.", "/medium."):
+        if small in url:
+            return url.replace(small, "/large.")
+    return url
+
+
 def pick_candidates(taxon: str, accept: set[str], client: httpx.Client,
                     rate_limit: float = 2.0, place_id: int | None = PLACE_POLAND_ID,
                     n: int = 10) -> list[SpeciesCandidate]:
@@ -88,6 +102,7 @@ def pick_candidates(taxon: str, accept: set[str], client: httpx.Client,
                 url = p.get("original_url") or p.get("large_url") or p.get("url")
                 if not url:
                     continue
+                url = _large_photo_url(url)
                 seen_obs.add(obs.get("id"))
                 out.append(SpeciesCandidate(
                     taxon=taxon, url=url, license=lic,

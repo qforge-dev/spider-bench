@@ -27,7 +27,7 @@ from spider_bench.media.validate import validate_bytes
 PROFILES = "configs/license-profiles.yaml"
 
 
-def _img_bytes(size=(128, 128), color=(200, 30, 40), fmt="PNG") -> bytes:
+def _img_bytes(size=(256, 256), color=(200, 30, 40), fmt="PNG") -> bytes:
     img = Image.new("RGB", size, color)
     # add variation so it is not near-empty
     px = img.load()
@@ -39,7 +39,7 @@ def _img_bytes(size=(128, 128), color=(200, 30, 40), fmt="PNG") -> bytes:
     return buf.getvalue()
 
 
-def _solid(size=(128, 128), color=(128, 128, 128), fmt="PNG") -> bytes:
+def _solid(size=(256, 256), color=(128, 128, 128), fmt="PNG") -> bytes:
     img = Image.new("RGB", size, color)
     buf = io.BytesIO()
     img.save(buf, format=fmt)
@@ -78,7 +78,7 @@ def test_perceptual_hash_determinism_and_distance():
 def test_validate_ok_png():
     vr = validate_bytes(_img_bytes(), declared_content_type="image/png")
     assert vr.ok and vr.failure_code is None
-    assert (vr.width, vr.height) == (128, 128)
+    assert (vr.width, vr.height) == (256, 256)
     assert vr.ext == "png"
 
 
@@ -206,3 +206,16 @@ def test_select_domination_limits():
     cands = [_cand(i, obs=f"obs{i}", watcher=f"o{i}", loc=f"L{i}", month=6) for i in range(5)]
     res = select_media(cands, profiles_path=PROFILES, per_taxon_cap=50, max_per_season=2)
     assert len(res.selected) == 2
+
+
+def test_large_photo_url_upgrade():
+    from spider_bench.media.collect_one import _large_photo_url
+
+    assert _large_photo_url("https://inaturalist-open-data.s3.amazonaws.com/photos/1/square.jpg").endswith("/large.jpg")
+    assert _large_photo_url("https://static.inaturalist.org/photos/1/small.jpeg").endswith("/large.jpeg")
+    assert _large_photo_url("https://upload.wikimedia.org/x.jpg") == "https://upload.wikimedia.org/x.jpg"
+
+
+def test_validate_rejects_thumbnails():
+    vr = validate_bytes(_img_bytes(size=(75, 75)))
+    assert not vr.ok and vr.failure_code == "tiny"

@@ -15,8 +15,8 @@ from pathlib import Path
 
 from PIL import Image, ImageStat
 
-MIN_WIDTH = 32
-MIN_HEIGHT = 32
+MIN_WIDTH = 150
+MIN_HEIGHT = 150
 MIN_BYTES = 200
 NEAR_EMPTY_RANGE = 3  # max-min grayscale range below this => near-empty
 

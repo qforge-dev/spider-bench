@@ -539,7 +539,7 @@ def media_collect_one(
                          quality_grade="research" if c.get("research_grade") else None,
                          country=c.get("country") or ("PL" if scope == "poland" else None),
                          place_guess=c.get("place_guess"),
-                         sha256=r.sha256 or "")
+                         sha256=r.sha256 or "", width=r.width, height=r.height)
     n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
     typer.echo(f"media accepted in db: {n}")
     conn.close()
@@ -607,7 +607,7 @@ def media_collect_n(
                          observation_id=str(c.get("observation_id", "")),
                          quality_grade="research" if c.get("research_grade") else None,
                          country=c.get("country"), place_guess=c.get("place_guess"),
-                         sha256=r.sha256 or "")
+                         sha256=r.sha256 or "", width=r.width, height=r.height)
     n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
     typer.echo(f"downloaded={len(ok)}/{len(results)} media accepted in db: {n}")
     conn.close()
@@ -671,9 +671,64 @@ def media_gap_fill(
                          license=c.get("license", ""), creator=c.get("creator"),
                          attribution=c.get("attribution"), source="commons",
                          source_media_id=str(c.get("photo_id")),
-                         observation_id=str(c.get("photo_id")), sha256=r.sha256 or "")
+                         observation_id=str(c.get("photo_id")), sha256=r.sha256 or "", width=r.width, height=r.height)
     n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
     typer.echo(f"media accepted in db: {n}")
+    conn.close()
+
+
+@media_app.command("upgrade-urls")
+def media_upgrade_urls(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    max_records: Optional[int] = typer.Option(None, "--max-records"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Re-fetch accepted iNat thumbnails as large (~1024px) images.
+
+    Same photo_id, new bytes: rows update in place (new sha256/s3_uri/dims).
+    Old 75px objects stay on S3 (referenced by releases <= 0.5.0).
+    """
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.media.download import DownloadItem, download_selected
+    from spider_bench.storage.s3 import public_url as _public_url
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    q = """SELECT m.id, m.source_media_id FROM media m
+           WHERE m.source='inaturalist' AND m.validation_status='accepted'
+             AND (m.width IS NULL OR m.width < 150) ORDER BY m.id"""
+    rows = conn.execute(q).fetchall()
+    if max_records:
+        rows = rows[:max_records]
+    typer.echo(f"upgrade candidates: {len(rows)} dry_run={dry_run}")
+    if dry_run:
+        conn.close()
+        return
+    s3 = s3mod.s3_client(cfg.aws.region)
+    done = failed = 0
+    for mid, photo_id in rows:
+        url = f"https://inaturalist-open-data.s3.amazonaws.com/photos/{photo_id}/large.jpg"
+        res = download_selected(
+            [DownloadItem(url=url, source="inaturalist", source_media_id=str(photo_id))],
+            bucket=cfg.aws.bucket, prefix=cfg.aws.prefix, region=cfg.aws.region,
+            s3_client=s3, conn=None)
+        r = res[0]
+        if r.ok and r.sha256:
+            conn.execute(
+                """UPDATE media SET sha256=?, s3_uri=?, public_url=?, width=?, height=?
+                   WHERE id=? AND validation_status='accepted'""",
+                (r.sha256, f"s3://{cfg.aws.bucket}/{r.s3_key}",
+                 _public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
+                 r.width, r.height, mid))
+            conn.commit()
+            done += 1
+        else:
+            failed += 1
+        if (done + failed) % 100 == 0:
+            typer.echo(f"upgraded {done} failed {failed}", err=True)
+    typer.echo(f"upgraded={done} failed={failed}")
     conn.close()
 
 

@@ -62,6 +62,8 @@ class DownloadResult:
     failure_code: str | None = None
     attempts: int = 0
     message: str = ""
+    width: int | None = None
+    height: int | None = None
 
 
 def _host(url: str) -> str:
@@ -236,7 +238,8 @@ def download_selected(
                     Bucket=bucket, Key=key, Body=body, ContentType=vr.mime or "application/octet-stream"
                 )
                 result = DownloadResult(
-                    item.url, True, sha256=digest, s3_key=key, attempts=attempts, message="uploaded"
+                    item.url, True, sha256=digest, s3_key=key, attempts=attempts, message="uploaded",
+                    width=vr.width, height=vr.height,
                 )
                 failure_code = None
                 break
