@@ -9,19 +9,35 @@ from spider_bench.benchmark.scorer import is_correct
 
 
 def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, Any]],
-                      manifest: dict[str, Any]) -> str:
+                      manifest: dict[str, Any],
+                      family_of: dict[str, str] | None = None) -> str:
     """HTML grid: image thumb, correct vs predicted, matched flag. No deps."""
     by_id = {t["task_id"]: t for t in tasks}
+    fam = {k.lower(): v for k, v in (family_of or {}).items()}
+    n = top1 = genus = family = valid = err = fam_known = 0
     cards = []
     for p in predictions:
         t = by_id.get(p.get("task_id", ""), {})
         pred = (p.get("predictions") or [{}])[0]
+        guess = str(pred.get("taxon") or "")
+        correct = str(t.get("correct_taxon") or "")
+        n += 1
         if p.get("error"):
-            badge, cls = "ERR", "miss"
-        elif pred.get("matched") and is_correct(t, pred.get("taxon", "")):
-            badge, cls = "✓", "ok"
+            badge, cls, err = "ERR", "miss", err + 1
         else:
-            badge, cls = "✗", "miss"
+            if guess:
+                valid += 1
+            if pred.get("matched") and is_correct(t, guess):
+                badge, cls, top1 = "✓", "ok", top1 + 1
+            else:
+                badge, cls = "✗", "miss"
+            if guess.split()[:1] == correct.split()[:1] and guess:
+                genus += 1
+            cf, gf = (t.get("meta") or {}).get("family", ""), fam.get(guess.lower(), "")
+            if cf and gf:
+                fam_known += 1
+                if cf == gf:
+                    family += 1
         img = t.get("image_public_url", "")
         cards.append(
             f"<div class='card {cls}'>"
@@ -33,6 +49,14 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             f"{' · ' + html.escape(str(p.get('error', ''))[:120]) if p.get('error') else ''}</div>"
             "</div>")
     mid = manifest.get("model_id", "?")
+    def pct(a, b):
+        return f"{100.0 * a / b:.1f}%" if b else "n/a"
+    header = (
+        f"<p>{n} samples \u00b7 cost ${manifest.get('estimated_cost_usd') or '-'} \u00b7 "
+        f"tasks <code>{html.escape(str(manifest.get('tasks_hash', ''))[:12])}</code></p>"
+        f"<p><strong>top-1 {pct(top1, n)}</strong> \u00b7 genus {pct(genus, n)} \u00b7 "
+        f"family {pct(family, fam_known)} <small>({fam_known} known)</small> \u00b7 "
+        f"valid names {pct(valid, n)} \u00b7 errors {err}</p>")
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
@@ -46,13 +70,13 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         ".pred{font-size:14px}.meta{font-size:12px;color:#666;word-break:break-all}"
         ".legend{font-size:13px;color:#444}</style></head><body>"
         f"<h1>{html.escape(mid)} <small>{html.escape(manifest.get('run_id', ''))}</small></h1>"
-        f"<p>{len(cards)} samples · cost ${manifest.get('estimated_cost_usd') or '-'} · "
-        f"tasks <code>{html.escape(str(manifest.get('tasks_hash', ''))[:12])}</code></p>"
+        f"{header}"
         f"<div class='grid'>{''.join(cards)}</div></body></html>\n"
     )
 
 
-def write_run_report(run_dir: str | Path, tasks: list[dict[str, Any]]) -> Path:
+def write_run_report(run_dir: str | Path, tasks: list[dict[str, Any]],
+                     family_of: dict[str, str] | None = None) -> Path:
     """Read predictions+manifest from run_dir, write report.html. Returns path."""
     import json
 
@@ -60,5 +84,5 @@ def write_run_report(run_dir: str | Path, tasks: list[dict[str, Any]]) -> Path:
     preds = [json.loads(line) for line in (run_dir / "predictions.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8")) if (run_dir / "manifest.json").exists() else {}
     out = run_dir / "report.html"
-    out.write_text(render_run_report(tasks, preds, manifest), encoding="utf-8")
+    out.write_text(render_run_report(tasks, preds, manifest, family_of), encoding="utf-8")
     return out

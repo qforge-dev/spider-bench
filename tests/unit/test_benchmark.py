@@ -320,3 +320,21 @@ def test_run_report_marks_wrong_answers_miss(tmp_path):
     (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r2"}))
     html = write_run_report(d, tasks).read_text()
     assert "✓" not in html and html.count("✗") == len(tasks)
+
+
+def test_run_report_header_percentages(tmp_path):
+    import json
+
+    from spider_bench.benchmark.report import write_run_report
+
+    tasks = _mini()
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+              "image_sha256": t["image_sha256"],
+              "predictions": [{"taxon": t["correct_taxon"], "score": 1.0, "matched": True}],
+              "error": None} for t in tasks]
+    d = tmp_path / "r3"
+    d.mkdir()
+    (d / "predictions.jsonl").write_text("\n".join(json.dumps(p) for p in preds))
+    (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r3"}))
+    html = write_run_report(d, tasks, {"Aa a": "F1", "Bb b": "F1"}).read_text()
+    assert "top-1 100.0%" in html and "genus 100.0%" in html and "family 100.0%" in html

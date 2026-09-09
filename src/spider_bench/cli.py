@@ -1126,7 +1126,16 @@ def benchmark_report(
     from spider_bench.benchmark.report import write_run_report
     from spider_bench.benchmark.tasks import read_tasks
 
-    out = write_run_report(Path(runs_dir) / run_id, read_tasks(_suite_tasks(suite, tasks)))
+    fam: dict[str, str] = {}
+    try:
+        import pyarrow.parquet as pq
+
+        table = pq.read_table("data/releases/polish-spiders/0.5.0/taxa.parquet")
+        d = table.to_pylist()
+        fam = {r["taxon"]: r.get("family", "") for r in d}
+    except Exception:
+        pass
+    out = write_run_report(Path(runs_dir) / run_id, read_tasks(_suite_tasks(suite, tasks)), fam)
     typer.echo(f"wrote {out}")
 
 
