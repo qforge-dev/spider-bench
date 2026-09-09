@@ -27,3 +27,33 @@ spider-bench doctor
 
 See `SPIDER_BENCH_IMPLEMENTATION_PLAN.md` for full plan (adapted: S3 instead of local `data/` media).
 See `docs/s3-layout.md` for bucket layout.
+See `docs/benchmark-runner-plan.md` for the benchmark design.
+
+## Commands (`spider-bench …`, every mutating command takes `--dry-run`)
+
+Setup: `init` (work dir + SQLite + S3 check), `status` (bucket/SQLite at a glance), `doctor` (creds, versioning, encryption, policy).
+
+Taxonomy: `taxonomy collect` (checklist + snapshot ingest, idempotent), `taxonomy reconcile` (name matching + conflict report).
+
+Discovery (metadata only, never image bytes): `discover inaturalist|gbif|commons` (rate-limited, resumable cursors).
+
+Audit: `audit coverage` (per-taxon image candidates vs `no_image`), `audit licenses` (classify vs profile), `audit taxonomy` (snapshot conflicts).
+
+Media: `media collect-one` (1 image/species, `--scope poland|worldwide`), `media collect-n` (up to N/species top-up), `media gap-fill` (Commons fallback, `--include-sharealike`), `media select|download|validate|deduplicate` (pipeline stages).
+
+Danger: `danger evidence|assessments import` (validated imports), `danger audit` (release dir gates).
+
+Release: `release build|verify|publish --version X` (deterministic Parquet + checksums, §11 gates, immutable S3 path + `COMPLETE`).
+
+Benchmark: `benchmark build-tasks` (release → tasks), `benchmark split` (gallery + disjoint query), `benchmark run --model luna` (parallel, `--max-cost`, resume), `benchmark score`, `benchmark leaderboard`, `benchmark models` (safe registry listing), `benchmark publish` (private S3 results).
+
+## Typical flows
+
+```bash
+pip install -e ".[dev]"            # add [app] for the search app
+spider-bench audit coverage        # where the gaps are
+spider-bench media collect-one --scope worldwide --only-missing
+spider-bench benchmark run --model luna --max-tasks 10 --max-cost 2.0
+spider-bench benchmark score       # scores latest run
+python -m app.app                  # local search UI → http://127.0.0.1:5000
+```
