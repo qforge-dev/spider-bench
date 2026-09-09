@@ -891,6 +891,9 @@ def benchmark_run(
     max_cost: Optional[float] = typer.Option(None, "--max-cost", help="USD ceiling (API models); stops early"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
     suite: str = typer.Option("species-id-v2", "--suite"),
+    concurrency: int = typer.Option(4, "--concurrency", help="parallel model requests"),
+    rate_limit: float = typer.Option(0.0, "--rate-limit", help="max requests/sec total (0 = unlimited)"),
+    retries: int = typer.Option(3, "--retries", help="retries on timeouts/429/5xx with backoff"),
 ) -> None:
     """Run a model over tasks. Paths resolve from --suite/--run-id; keys from env only."""
     import datetime as _dt
@@ -959,7 +962,8 @@ def benchmark_run(
 
     typer.echo(f"starting run model={getattr(adapter, 'model_id', model)} tasks={total}", err=True)
     summary = run_tasks(rows, adapter, out_path, loader=loader, timeout_s=timeout,
-                        resume=resume, max_cost=max_cost, progress=_progress)
+                        resume=resume, max_cost=max_cost, progress=_progress,
+                        max_workers=concurrency, rate_limit=rate_limit, retries=retries)
     manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
                 "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
                 "usage": summary.get("usage", {}),

@@ -192,7 +192,9 @@ def test_budget_stops_run_early(tmp_path):
 
     tasks = _mini()
     out = tmp_path / "p.jsonl"
-    s = run_tasks(tasks, Priced(), out, loader=lambda t: b"x", max_cost=1.0)
+    # single worker: deterministic stop right at the budget. With N workers,
+    # overshoot is bounded by rows already in flight (documented behavior).
+    s = run_tasks(tasks, Priced(), out, loader=lambda t: b"x", max_cost=1.0, max_workers=1)
     assert s["wrote"] == 1 and s.get("stopped_early")
 
 
@@ -229,3 +231,43 @@ def test_gpt5_params_omit_temperature(monkeypatch):
                              "price_output_1k_tokens": 0.0}, post=fake_post)
     a.predict(b"", {"candidates": ["Aa a"]})
     assert "temperature" not in seen and seen["max_completion_tokens"] == 50
+
+
+def test_parallel_content_deterministic_and_retry(tmp_path):
+    import threading
+
+    from spider_bench.benchmark.runner import run_tasks
+
+    active = [0]
+    peak = [0]
+    lock = threading.Lock()
+    calls = {}
+
+    class Flaky:
+        model_id = "flaky"
+
+        def predict(self, image_bytes, context):
+            tid = context["task_id"]
+            with lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            try:
+                import time as _t
+                _t.sleep(0.02)
+                n = calls.get(tid, 0)
+                calls[tid] = n + 1
+                if n == 0:
+                    raise TimeoutError("timed out, try again")
+                return [{"taxon": "Aa a", "score": 1.0}]
+            finally:
+                with lock:
+                    active[0] -= 1
+
+    tasks = _mini() * 2
+    out = tmp_path / "p.jsonl"
+    s = run_tasks(tasks, Flaky(), out, loader=lambda t: b"x", max_workers=4,
+                  retries=3, backoff_base=0.001)
+    assert s["errors"] == 0 and s["wrote"] == 4 and peak[0] > 1
+    import json
+    got = sorted(json.loads(line)["task_id"] for line in out.read_text().splitlines())
+    assert got == sorted(t["task_id"] for t in tasks)
