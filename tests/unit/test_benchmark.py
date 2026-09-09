@@ -403,3 +403,38 @@ def test_bedrock_adapter_converse_shape_and_usage():
     assert a.totals["input_tokens"] == 50 and a.estimated_cost() == 0.0
 
 
+
+
+def test_structured_flag_gates_both_adapters(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+    from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen.update(body)
+        return {"choices": [{"message": {"content": '{"species": "Aa a"}'}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    base = {"id": "o", "base_url": "https://x/v1", "model": "m", "key_env": "T_KEY",
+            "temperature": None, "token_param": "max_tokens", "max_output_tokens": 10,
+            "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+            "price_output_1k_tokens": 0.0}
+    a = OpenAICompatAdapter({**base}, post=fake_post)
+    assert "response_format" not in seen  # default off: behavior unchanged
+    a.predict(b"", {"candidates": ["Aa a"]})
+    b = OpenAICompatAdapter({**base, "structured_output": True}, post=fake_post)
+    preds = b.predict(b"", {"candidates": ["Aa a"]})
+    assert seen["response_format"]["type"] == "json_schema"
+    assert preds[0] == {"taxon": "Aa a", "score": 1.0, "matched": True, "raw": "Aa a"}
+
+    class FakeBedrock:
+        def converse(self, **kwargs):
+            assert "outputConfig" not in kwargs  # flag off -> plain call
+            return {"output": {"message": {"content": [{"text": "Aa a"}]}}, "usage": {}}
+
+    c = BedrockAdapter({"id": "f", "model": "f", "region": "r", "max_output_tokens": 10,
+                        "structured_output": False,
+                        "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                        "price_output_1k_tokens": 0.0}, client=FakeBedrock())
+    assert c.predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})[0]["taxon"] == "Aa a"

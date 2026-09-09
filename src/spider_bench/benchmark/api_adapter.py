@@ -104,6 +104,22 @@ class OpenAICompatAdapter:
         body: dict[str, Any] = {"model": self._cfg["model"],
                 "messages": [{"role": "system", "content": system_text},
                              {"role": "user", "content": user_content}]}
+        if self._cfg.get("structured_output"):
+            import json as _json2
+
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "identify_species",
+                    "strict": True,
+                    "schema": _json2.loads(_json2.dumps({
+                        "type": "object",
+                        "properties": {"species": {"type": "string"}},
+                        "required": ["species"],
+                        "additionalProperties": False,
+                    })),
+                },
+            }
         if self._cfg.get("temperature") is not None:
             body["temperature"] = self._cfg["temperature"]
         body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]
@@ -126,6 +142,13 @@ class OpenAICompatAdapter:
             text = payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
             text = ""
+        if self._cfg.get("structured_output"):
+            try:
+                import json as _json3
+
+                text = _json3.loads(text).get("species", "") or ""
+            except (ValueError, AttributeError):
+                pass
         usage = payload.get("usage", {}) or {}
         self.totals["requests"] += 1
         self.totals["input_tokens"] += int(usage.get("prompt_tokens", 0) or 0)

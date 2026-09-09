@@ -66,6 +66,14 @@ class BedrockAdapter:
         }
         import json as _json
 
+        structured = bool(self._cfg.get("structured_output", True))
+        extra = {}
+        if structured:
+            extra["outputConfig"] = {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
+                "name": "identify_species",
+                "description": "Spider species identification.",
+                "schema": _json.dumps(schema),
+            }}}}
         try:
             resp = self._get_client().converse(
                 modelId=self._cfg["model"],
@@ -81,11 +89,7 @@ class BedrockAdapter:
                     ],
                 }],
                 inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
-                outputConfig={"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
-                    "name": "identify_species",
-                    "description": "Spider species identification.",
-                    "schema": _json.dumps(schema),
-                }}}},
+                **extra,
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail
             raise RuntimeError(f"bedrock converse failed: {e}") from e
