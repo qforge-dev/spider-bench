@@ -54,7 +54,8 @@ class BedrockAdapter:
         system_text = ((context.get("prompt") or "Identify the spider species in this photograph.")
                        + f" Valid answers ({len(cands)}): " + "; ".join(cands))
         user_text = ("Identify the spider in this photograph. "
-                     "Call identify_species with exactly one scientific name from the candidate list.")
+                     "Reply with ONLY the scientific name and nothing else. "
+                     "No reasoning, no description, no punctuation around it.")
         try:
             resp = self._get_client().converse(
                 modelId=self._cfg["model"],
@@ -70,38 +71,13 @@ class BedrockAdapter:
                     ],
                 }],
                 inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
-                toolConfig={
-                    "tools": [{
-                        "toolSpec": {
-                            "name": "identify_species",
-                            "description": "Return the identified spider species.",
-                            "inputSchema": {"json": {
-                                "type": "object",
-                                "properties": {"species": {
-                                    "type": "string",
-                                    "description": "One scientific name from the candidate list."}},
-                                "required": ["species"]}},
-                        },
-                    }],
-                    "toolChoice": {"any": {}},
-                },
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail
             raise RuntimeError(f"bedrock converse failed: {e}") from e
-        text = ""
-        for block in resp.get("output", {}).get("message", {}).get("content", []) or []:
-            if "toolUse" in block:
-                try:
-                    text = (block["toolUse"].get("input", {}) or {}).get("species", "") or ""
-                except (AttributeError, TypeError):
-                    text = ""
-                if text:
-                    break
-        if not text:
-            try:
-                text = resp["output"]["message"]["content"][0].get("text", "") or ""
-            except (KeyError, IndexError, TypeError):
-                text = ""
+        try:
+            text = resp["output"]["message"]["content"][0].get("text", "") or ""
+        except (KeyError, IndexError, TypeError):
+            text = ""
         usage = resp.get("usage", {}) or {}
         self.totals["requests"] += 1
         self.totals["input_tokens"] += int(usage.get("inputTokens", 0) or 0)
