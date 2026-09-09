@@ -681,13 +681,19 @@ def media_gap_fill(
 def media_upgrade_urls(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     max_records: Optional[int] = typer.Option(None, "--max-records"),
+    concurrency: int = typer.Option(12, "--concurrency"),
+    gallery_only: bool = typer.Option(False, "--gallery-only",
+                                      help="one row per taxon (the gallery image)"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
-    """Re-fetch accepted iNat thumbnails as large (~1024px) images.
+    """Re-fetch accepted iNat thumbnails as large (~1024px) images, in parallel.
 
     Same photo_id, new bytes: rows update in place (new sha256/s3_uri/dims).
     Old 75px objects stay on S3 (referenced by releases <= 0.5.0).
+    Rows whose source photo is gone keep their thumbnails.
     """
+    import concurrent.futures as _fut
+
     from spider_bench.db import ensure_migrated as _migrated
     from spider_bench.db import get_connection as _connect
     from spider_bench.media.download import DownloadItem, download_selected
@@ -696,21 +702,34 @@ def media_upgrade_urls(
     cfg = _cfg(config)
     conn = _connect(cfg.local_.sqlite_path)
     _migrated(conn)
-    q = """SELECT m.id, m.source_media_id FROM media m
-           WHERE m.source='inaturalist' AND m.validation_status='accepted'
-             AND (m.width IS NULL OR m.width < 150) ORDER BY m.id"""
-    rows = conn.execute(q).fetchall()
+    if gallery_only:
+        # one row per taxon: earliest photo per species (matches gallery pick)
+        rows = conn.execute(
+            """SELECT m.id, m.source_media_id FROM media m
+               JOIN observations o ON o.id=m.observation_id
+               JOIN (SELECT o2.source_taxon AS t, MIN(m2.source_media_id) AS mid
+                     FROM media m2 JOIN observations o2 ON o2.id=m2.observation_id
+                     WHERE m2.source='inaturalist' AND m2.validation_status='accepted'
+                       AND (m2.width IS NULL OR m2.width < 150)
+                     GROUP BY o2.source_taxon) g
+                 ON g.t = o.source_taxon AND g.mid = m.source_media_id
+               ORDER BY m.id""").fetchall()
+    else:
+        q = """SELECT m.id, m.source_media_id FROM media m
+               WHERE m.source='inaturalist' AND m.validation_status='accepted'
+                 AND (m.width IS NULL OR m.width < 150) ORDER BY m.id"""
+        rows = conn.execute(q).fetchall()
     if max_records:
         rows = rows[:max_records]
-    typer.echo(f"upgrade candidates: {len(rows)} dry_run={dry_run}")
+    typer.echo(f"upgrade candidates: {len(rows)} workers={concurrency} dry_run={dry_run}")
     if dry_run:
         conn.close()
         return
     s3 = s3mod.s3_client(cfg.aws.region)
-    done = failed = 0
     sizes = ("large", "medium", "original")
-    for mid, photo_id in rows:
-        got = None
+
+    def fetch_one(args: tuple) -> tuple | None:
+        mid, photo_id = args
         for size in sizes:
             url = f"https://inaturalist-open-data.s3.amazonaws.com/photos/{photo_id}/{size}.jpg"
             res = download_selected(
@@ -719,21 +738,28 @@ def media_upgrade_urls(
                 s3_client=s3, conn=None)
             r = res[0]
             if r.ok and r.sha256:
-                got = r
-                break
-        if got is not None:
-            conn.execute(
-                """UPDATE media SET sha256=?, s3_uri=?, public_url=?, width=?, height=?
-                   WHERE id=? AND validation_status='accepted'""",
-                (got.sha256, f"s3://{cfg.aws.bucket}/{got.s3_key}",
-                 _public_url(cfg.aws.bucket, cfg.aws.region, got.s3_key or ""),
-                 got.width, got.height, mid))
-            conn.commit()
-            done += 1
-        else:
-            failed += 1
-        if (done + failed) % 100 == 0:
-            typer.echo(f"upgraded {done} failed {failed}", err=True)
+                return (r.sha256, f"s3://{cfg.aws.bucket}/{r.s3_key}",
+                        _public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
+                        r.width, r.height, mid)
+        return None
+
+    done = failed = 0
+    with _fut.ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+        for i, outcome in enumerate(pool.map(fetch_one, rows), 1):
+            if outcome is None:
+                failed += 1
+            else:
+                sha, uri, pub, w, h, mid = outcome
+                conn.execute(
+                    """UPDATE media SET sha256=?, s3_uri=?, public_url=?, width=?, height=?
+                       WHERE id=? AND validation_status='accepted'""",
+                    (sha, uri, pub, w, h, mid))
+                if i % 25 == 0:
+                    conn.commit()
+                done += 1
+            if i % 100 == 0:
+                typer.echo(f"upgraded {done} failed {failed}", err=True)
+    conn.commit()
     typer.echo(f"upgraded={done} failed={failed} (failed rows keep their thumbnails)")
     conn.close()
 
