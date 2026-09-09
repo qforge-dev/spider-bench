@@ -56,6 +56,16 @@ class BedrockAdapter:
         user_text = ("Identify the spider in this photograph. "
                      "Reply with ONLY the scientific name and nothing else. "
                      "No reasoning, no description, no punctuation around it.")
+        schema = {
+            "type": "object",
+            "properties": {"species": {
+                "type": "string",
+                "description": "Exactly one scientific spider name from the candidate list."}},
+            "required": ["species"],
+            "additionalProperties": False,
+        }
+        import json as _json
+
         try:
             resp = self._get_client().converse(
                 modelId=self._cfg["model"],
@@ -71,13 +81,23 @@ class BedrockAdapter:
                     ],
                 }],
                 inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
+                outputConfig={"textFormat": {"type": "json_schema", "structure": {"jsonSchema": {
+                    "name": "identify_species",
+                    "description": "Spider species identification.",
+                    "schema": _json.dumps(schema),
+                }}}},
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail
             raise RuntimeError(f"bedrock converse failed: {e}") from e
+        raw_text = ""
         try:
-            text = resp["output"]["message"]["content"][0].get("text", "") or ""
+            raw_text = resp["output"]["message"]["content"][0].get("text", "") or ""
         except (KeyError, IndexError, TypeError):
-            text = ""
+            raw_text = ""
+        try:
+            text = ( _json.loads(raw_text).get("species", "") or "")
+        except (ValueError, AttributeError):
+            text = raw_text  # schema not enforced server-side: fall back to text match
         usage = resp.get("usage", {}) or {}
         self.totals["requests"] += 1
         self.totals["input_tokens"] += int(usage.get("inputTokens", 0) or 0)

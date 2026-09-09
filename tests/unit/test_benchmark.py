@@ -387,7 +387,10 @@ def test_bedrock_adapter_converse_shape_and_usage():
             assert kwargs["system"][0]["text"].startswith("Pick")
             img = kwargs["messages"][0]["content"][1]["image"]
             assert img["format"] == "jpeg" and img["source"]["bytes"].startswith(b"\xff\xd8\xff")
-            return {"output": {"message": {"content": [{"text": "Bb b"}]}},
+            oc = kwargs["outputConfig"]["textFormat"]
+            assert oc["type"] == "json_schema"
+            assert "species" in oc["structure"]["jsonSchema"]["schema"]
+            return {"output": {"message": {"content": [{"text": '{"species": "Bb b"}'}]}},
                     "usage": {"inputTokens": 50, "outputTokens": 5}}
 
     a = BedrockAdapter({"id": "fable", "model": "fable", "region": "us-east-1",
