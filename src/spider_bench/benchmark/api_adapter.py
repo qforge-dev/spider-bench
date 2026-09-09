@@ -71,6 +71,10 @@ class OpenAICompatAdapter:
                 "max_tokens": self._cfg["max_output_tokens"]}
         headers = {"Authorization": f"Bearer {self._key()}"}
         url = self._cfg["base_url"] + "/chat/completions"
+        if self._cfg.get("api_version"):
+            import urllib.parse
+
+            url += "?" + urllib.parse.urlencode({"api-version": self._cfg["api_version"]})
         if self._post is not None:
             payload = self._post(url, body, headers)
         else:

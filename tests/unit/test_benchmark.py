@@ -149,10 +149,28 @@ def test_api_adapter_parses_and_tracks_cost(monkeypatch):
                              "price_per_1k_requests": 1.0, "price_input_1k_tokens": 2.0,
                              "price_output_1k_tokens": 4.0}, post=fake_post)
     preds = a.predict(b"img", {"candidates": ["Aa a", "Bb b"], "image_public_url": "https://x/i.jpg"})
-    assert preds[0]["taxon"] == "Bb b" and preds[0]["matched"] is True
-    assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5}
+    assert preds[0]["taxon"] == "Bb b" and preds[0]["matched"] is True    assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5}
     assert a.estimated_cost() == 1 / 1000 * 1.0 + 100 / 1000 * 2.0 + 5 / 1000 * 4.0
     assert "Authorization" in calls[0][2]
+
+
+def test_api_version_appended_for_azure(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen["url"] = url
+        return {"choices": [{"message": {"content": "Aa a"}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    a = OpenAICompatAdapter({"id": "az", "base_url": "https://r.openai.azure.com/openai/deployments/d",
+                             "model": "d", "key_env": "T_KEY", "temperature": 0.0,
+                             "max_output_tokens": 10, "api_version": "2024-10-21",
+                             "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                             "price_output_1k_tokens": 0.0}, post=fake_post)
+    a.predict(b"", {"candidates": ["Aa a"]})
+    assert seen["url"].endswith("/chat/completions?api-version=2024-10-21")
 
 
 def test_budget_stops_run_early(tmp_path):
