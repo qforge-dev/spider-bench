@@ -937,8 +937,29 @@ def benchmark_run(
         return r.content
 
     adapter = adapters[model]
+    total = len(rows)
+    step = max(1, total // 50)  # ~50 progress lines per run
+    import time as _time
+
+    t_start = _time.time()
+
+    def _progress(done_n: int, total_n: int) -> None:
+        if done_n % step == 0 or done_n == total_n:
+            el = _time.time() - t_start
+            rate = done_n / el if el > 0 else 0.0
+            eta = (total_n - done_n) / rate if rate > 0 else 0.0
+            cost = ""
+            if hasattr(adapter, "estimated_cost"):
+                try:
+                    cost = f" cost=${adapter.estimated_cost():.4f}"
+                except Exception:
+                    pass
+            typer.echo(f"[{done_n}/{total_n}] {done_n / total_n * 100:.0f}% "
+                       f"elapsed={el:.0f}s eta={eta:.0f}s{cost}", err=True)
+
+    typer.echo(f"starting run model={getattr(adapter, 'model_id', model)} tasks={total}", err=True)
     summary = run_tasks(rows, adapter, out_path, loader=loader, timeout_s=timeout,
-                        resume=resume, max_cost=max_cost)
+                        resume=resume, max_cost=max_cost, progress=_progress)
     manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
                 "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
                 "usage": summary.get("usage", {}),
@@ -1062,6 +1083,8 @@ def benchmark_score(
             raise typer.BadParameter("no runs found; pass --predictions or --run-id")
         pred_path = runs[-1]
     scores = score(read_tasks(tasks_path), read_predictions(pred_path))
+    typer.echo(f"scored {scores.get('scored')}/{scores.get('tasks')} "
+               f"errors={scores.get('errors')} top1={scores.get('top1', 0):.3f}", err=True)
     typer.echo(json.dumps(scores, indent=2))
     out_path = Path(out) if out else pred_path.parent / "scores.json"
     out_path.write_text(json.dumps(scores, indent=2), encoding="utf-8")

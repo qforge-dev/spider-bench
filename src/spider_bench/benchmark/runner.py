@@ -26,7 +26,8 @@ def _load_image_bytes(task: dict[str, Any], loader: Callable[[dict[str, Any]], b
 def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *,
               loader: Callable[[dict[str, Any]], bytes] | None = None,
               timeout_s: float = 120.0, resume: bool = True,
-              max_cost: float | None = None) -> dict[str, Any]:
+              max_cost: float | None = None,
+              progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
     """Run all tasks, stream predictions JSONL. Returns run summary.
 
     max_cost stops the run once adapter.estimated_cost() (if available)
@@ -75,6 +76,11 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
             fh.write(json.dumps(rec, sort_keys=True) + "\n")
             fh.flush()
             wrote += 1
+            if progress is not None:
+                try:
+                    progress(len(done) + wrote, len(tasks))
+                except Exception:
+                    pass
     summary: dict[str, Any] = {"tasks": len(tasks), "wrote": wrote, "resumed": len(done),
                                "errors": errors, "seconds": round(time.time() - t0, 1),
                                "tasks_hash": thash, "predictions_path": str(out)}
