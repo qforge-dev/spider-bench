@@ -525,6 +525,74 @@ def media_collect_one(
     conn.close()
 
 
+@media_app.command("collect-n")
+def media_collect_n(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    profile: str = typer.Option("research", "--profile"),
+    per_species: int = typer.Option(10, "--per-species"),
+    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
+    download: bool = typer.Option(True, "--download/--no-download"),
+    out: str = typer.Option("data/work/collect-n.json", "--out"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Top up to N distinct-observation images per species (worldwide, licensed).
+
+    Skips observations already in the DB: reruns only fetch new material.
+    Feeds the train/gallery/query splitter.
+    """
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.media.collect_one import collect_n_candidates, record_media_row
+    from spider_bench.media.download import DownloadItem, download_selected
+    from spider_bench.storage.s3 import public_url as _public_url
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    taxa = [r[0] for r in conn.execute("SELECT DISTINCT original_name FROM country_taxa ORDER BY 1").fetchall()]
+    if max_species:
+        taxa = taxa[:max_species]
+    have_obs = {r[0] for r in conn.execute(
+        "SELECT DISTINCT source_observation_id FROM observations WHERE source='inaturalist'").fetchall()}
+    skip = {int(x) for x in have_obs if str(x).isdigit()}
+    typer.echo(f"collect-n species={len(taxa)} per_species={per_species} known_obs={len(skip)} dry_run={dry_run}")
+    manifest = collect_n_candidates(taxa, profile=profile, rate_limit=rate_limit,
+                                    per_species=per_species, skip_observation_ids=skip)
+    typer.echo(f"new_images={manifest['images']}")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    s3.put_object(Bucket=cfg.aws.bucket, Key=f"{cfg.aws.prefix}work/collect-n-{date}.json",
+                  Body=json.dumps({k: v for k, v in manifest.items() if k != "candidates"}).encode(),
+                  ContentType="application/json")
+    if dry_run or not download:
+        conn.close()
+        return
+    items = [DownloadItem(url=c["url"], license=c["license"], taxon=c["taxon"],
+                          source="inaturalist", source_media_id=str(c.get("photo_id")))
+             for c in manifest["candidates"]]
+    results = download_selected(items, bucket=cfg.aws.bucket, prefix=cfg.aws.prefix,
+                                region=cfg.aws.region, s3_client=s3, conn=conn)
+    ok = [r for r in results if r.ok]
+    by_url = {c["url"]: c for c in manifest["candidates"]}
+    for r in ok:
+        c = by_url.get(r.url, {})
+        record_media_row(conn, taxon=c.get("taxon", ""), s3_uri=f"s3://{cfg.aws.bucket}/{r.s3_key}",
+                         public_url=_public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
+                         license=c.get("license", ""), creator=c.get("creator"),
+                         attribution=c.get("attribution"), source="inaturalist",
+                         source_media_id=str(c.get("photo_id")),
+                         observation_id=str(c.get("observation_id", "")),
+                         quality_grade="research" if c.get("research_grade") else None,
+                         country=c.get("country"), place_guess=c.get("place_guess"),
+                         sha256=r.sha256 or "")
+    n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
+    typer.echo(f"downloaded={len(ok)}/{len(results)} media accepted in db: {n}")
+    conn.close()
+
+
 @media_app.command("gap-fill")
 def media_gap_fill(
     config: str = typer.Option("configs/poland.yaml", "--config"),
@@ -831,6 +899,81 @@ def benchmark_run(
 
     summary = run_tasks(rows, adapters[model], out, loader=loader, timeout_s=timeout, resume=resume)
     typer.echo(json.dumps(summary, indent=2))
+
+
+@benchmark_app.command("split")
+def benchmark_split(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    out: str = typer.Option("data/benchmarks/species-id-v2", "--out"),
+    query_per_taxon: int = typer.Option(4, "--query-per-taxon"),
+    seed: int = typer.Option(42, "--seed"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Split accepted media into gallery (1/taxon) + observation-disjoint query set."""
+    from spider_bench.benchmark.split import split_gallery_query
+    from spider_bench.benchmark.tasks import build_tasks
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    cols = ("m.sha256, m.s3_uri, m.public_url, m.source, m.source_media_id,"
+            " o.source_taxon AS taxon, o.id AS observation_id, o.country_code AS country,"
+            " t.family AS family")
+    rows = [dict(zip(("sha256", "s3_uri", "public_url", "source", "source_media_id",
+                       "taxon", "observation_id", "country", "family"),
+                      r)) for r in conn.execute(
+        f"""SELECT {cols} FROM media m JOIN observations o ON o.id=m.observation_id
+            LEFT JOIN taxa t ON t.id=o.taxon_id
+            WHERE m.validation_status='accepted' ORDER BY o.source_taxon, m.sha256""").fetchall()]
+    conn.close()
+    taxa = [{"taxon": t, "family": next((r["family"] or "" for r in rows if r["taxon"] == t), "")}
+            for t in sorted({r["taxon"] for r in rows if r["taxon"]})]
+    parts = split_gallery_query(rows, query_per_taxon=query_per_taxon, seed=seed)
+    typer.echo(f"taxa={parts['taxa']} gallery={parts['gallery_n']} query={parts['query_n']} dry_run={dry_run}")
+    if dry_run:
+        return
+    names = sorted({t["taxon"] for t in taxa})
+    gallery_tasks = build_tasks(
+        [{"taxon": n} for n in names],
+        [{**g, "taxon": g["taxon"]} for g in parts["gallery"]], imaged_only=False)
+    # query tasks reference query images but score against the gallery taxon set
+    query_tasks = []
+    for q in sorted(parts["query"], key=lambda r: str(r.get("sha256"))):
+        query_tasks.append({
+            "task_id": f"species-id-v2:{q['taxon'].replace(' ', '_')}:{q['sha256'][:12]}",
+            "task_type": "species-id-closed",
+            "image_sha256": q["sha256"], "image_s3_uri": q["s3_uri"],
+            "image_public_url": q.get("public_url", ""),
+            "prompt": ("Identify the spider species in this photograph. "
+                       "Reply with exactly one scientific name from the candidate list."),
+            "candidates": names, "correct_taxon": q["taxon"], "synonyms_accepted": [],
+            "meta": {"family": q.get("family", ""), "country": q.get("country", ""),
+                     "suite": "species-id-v2"}})
+    from spider_bench.benchmark.tasks import write_tasks as _wt
+    _wt(gallery_tasks, Path(out) / "gallery", dataset_version="db",
+        dataset_checksums={"split": f"seed={seed}"})
+    _wt(query_tasks, Path(out) / "query", dataset_version="db",
+        dataset_checksums={"split": f"seed={seed}"})
+    typer.echo(f"wrote {out}/gallery + {out}/query")
+
+
+@benchmark_app.command("publish")
+def benchmark_publish(
+    dir: str = typer.Option(..., "--dir"),
+    suite: str = typer.Option(..., "--suite"),
+    run_id: str = typer.Option(..., "--run-id"),
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Publish a run dir to the private S3 results prefix (COMPLETE last)."""
+    from spider_bench.benchmark.publish import publish_results
+
+    cfg = _cfg(config)
+    result = publish_results(dir, bucket=cfg.aws.bucket, suite=suite, run_id=run_id,
+                             region=cfg.aws.region, dry_run=dry_run)
+    typer.echo(f"published {result['complete_key']} keys={len(result['keys'])} dry_run={dry_run}")
 
 
 @benchmark_app.command("score")

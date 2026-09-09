@@ -53,3 +53,55 @@ def test_runner_isolates_crashes_and_resumes(tmp_path):
     # resume: second run writes nothing new
     summary2 = run_tasks(tasks, Boom(), out, loader=lambda t: b"img", resume=True)
     assert summary2["wrote"] == 0 and summary2["resumed"] == 2
+
+
+def test_split_is_disjoint_and_deterministic():
+    from spider_bench.benchmark.split import split_gallery_query
+
+    rows = [{"taxon": "Aa a", "sha256": f"{i:064d}", "observation_id": i,
+             "s3_uri": f"s3://b/{i}", "family": "F1"} for i in range(6)]
+    a = split_gallery_query(rows, query_per_taxon=2, seed=7)
+    b = split_gallery_query(rows, query_per_taxon=2, seed=7)
+    assert a == b
+    assert a["gallery_n"] == 1 and a["query_n"] == 2
+    g = a["gallery"][0]
+    assert all(q["observation_id"] != g["observation_id"] and q["sha256"] != g["sha256"]
+               for q in a["query"])
+
+
+def test_collect_n_skips_known_observations():
+    from spider_bench.media.collect_one import collect_n_candidates
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [
+                {"id": 1, "quality_grade": "research", "user": {"login": "u"},
+                 "photos": [{"id": 11, "license_code": "cc0",
+                             "original_url": "https://static.inaturalist.org/11.jpg"}]},
+                {"id": 2, "quality_grade": "research", "user": {"login": "u"},
+                 "photos": [{"id": 22, "license_code": "cc0",
+                             "original_url": "https://static.inaturalist.org/22.jpg"}]},
+            ]}
+
+    class Client:
+        def get(self, url, params=None, timeout=None):
+            return Resp()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import httpx
+    _orig = httpx.Client
+    httpx.Client = lambda *a, **k: Client()  # noqa: E731
+    try:
+        m = collect_n_candidates(["Aa a"], rate_limit=10000, per_species=10,
+                                 skip_observation_ids={1})
+    finally:
+        httpx.Client = _orig
+    assert [c["observation_id"] for c in m["candidates"]] == [2]

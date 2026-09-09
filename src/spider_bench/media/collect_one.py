@@ -52,19 +52,19 @@ def _photo_codes(accept: set[str]) -> str:
     return ",".join(sorted(out)) or "cc0,cc-by,cc-by-nc"
 
 
-def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
-                   rate_limit: float = 2.0, place_id: int | None = PLACE_POLAND_ID) -> SpeciesCandidate | None:
-    """Best licensed photo for one species, research-grade first.
-
-    place_id=None searches worldwide (fallback for species with no Poland
-    photo); observation geography is captured on the candidate either way.
-    Pure HTTP.
-    """
+def pick_candidates(taxon: str, accept: set[str], client: httpx.Client,
+                    rate_limit: float = 2.0, place_id: int | None = PLACE_POLAND_ID,
+                    n: int = 10) -> list[SpeciesCandidate]:
+    """Up to n candidates from distinct observations, research-grade first. Pure HTTP."""
     codes = _photo_codes(accept)
+    out: list[SpeciesCandidate] = []
+    seen_obs: set[int] = set()
     for grade in ("research", None):
+        if len(out) >= n:
+            break
         params: dict[str, Any] = {"taxon_name": taxon,
                                   "photos": "true", "photo_licensed": "true",
-                                  "photo_license": codes, "per_page": 10,
+                                  "photo_license": codes, "per_page": 50,
                                   "order_by": "votes", "order": "desc"}
         if place_id is not None:
             params["place_id"] = place_id
@@ -78,6 +78,9 @@ def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
             results = []
         time.sleep(1.0 / max(rate_limit, 0.1))
         for obs in results:
+            if len(out) >= n or obs.get("id") in seen_obs:
+                continue
+            user = obs.get("user") or {}
             for p in obs.get("photos") or []:
                 lic = normalize_license(p.get("license_code"))
                 if lic not in accept:
@@ -85,16 +88,29 @@ def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
                 url = p.get("original_url") or p.get("large_url") or p.get("url")
                 if not url:
                     continue
-                user = obs.get("user") or {}
-                return SpeciesCandidate(
+                seen_obs.add(obs.get("id"))
+                out.append(SpeciesCandidate(
                     taxon=taxon, url=url, license=lic,
                     creator=(p.get("user") or user or {}).get("login") or user.get("login"),
                     observer=user.get("login"), observation_id=obs.get("id"), photo_id=p.get("id"),
                     attribution=p.get("attribution"),
                     research_grade=obs.get("quality_grade") == "research",
                     country=("PL" if place_id == PLACE_POLAND_ID else None),
-                    place_guess=obs.get("place_guess"))
-    return None
+                    place_guess=obs.get("place_guess")))
+                break
+    return out[:n]
+
+
+def pick_candidate(taxon: str, accept: set[str], client: httpx.Client,
+                   rate_limit: float = 2.0, place_id: int | None = PLACE_POLAND_ID) -> SpeciesCandidate | None:
+    """Best licensed photo for one species, research-grade first.
+
+    place_id=None searches worldwide (fallback for species with no Poland
+    photo); observation geography is captured on the candidate either way.
+    Pure HTTP.
+    """
+    out = pick_candidates(taxon, accept, client, rate_limit, place_id, n=1)
+    return out[0] if out else None
 
 
 def collect_candidates(taxa: list[str], profile: str = "research",
@@ -117,6 +133,35 @@ def collect_candidates(taxa: list[str], profile: str = "research",
                 print(f"collect-one: {i}/{len(names)} found={len(found)} missing={len(missing)}", flush=True)
     return {"species_total": len(names), "found": len(found), "missing": len(missing),
             "candidates": found, "missing_taxa": missing}
+
+
+def collect_n_candidates(taxa: list[str], profile: str = "research",
+                         rate_limit: float = 2.0, limit: int | None = None,
+                         progress_every: int = 50,
+                         place_id: int | None = None,
+                         per_species: int = 10,
+                         skip_observation_ids: set[int] | None = None) -> dict[str, Any]:
+    """Up to per_species distinct-observation candidates per taxon (worldwide default).
+
+    Already-collected observation IDs are skipped so reruns only fetch new
+    material (idempotent top-up). Returns manifest with per-taxon counts.
+    """
+    accept, _ = load_license_profile(profile)
+    skip = skip_observation_ids or set()
+    names = taxa[:limit] if limit else taxa
+    found: list[dict] = []
+    per_taxon: dict[str, int] = {}
+    with httpx.Client() as client:
+        for i, name in enumerate(names, 1):
+            cands = pick_candidates(name, accept, client, rate_limit, place_id, n=per_species + 10)
+            fresh = [c for c in cands if c.observation_id not in skip][:per_species]
+            for c in fresh:
+                found.append(c.__dict__)
+            per_taxon[name] = len(fresh)
+            if i % progress_every == 0:
+                print(f"collect-n: {i}/{len(names)} images={len(found)}", flush=True)
+    return {"species_total": len(names), "per_species": per_species,
+            "images": len(found), "per_taxon": per_taxon, "candidates": found}
 
 
 def _search_variants(taxon: str) -> list[str]:
