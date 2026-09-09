@@ -107,6 +107,81 @@ def collect_candidates(taxa: list[str], profile: str = "research",
             "candidates": found, "missing_taxa": missing}
 
 
+def _search_variants(taxon: str) -> list[str]:
+    """Full quoted name, then binomial (subspecies rarely have own files)."""
+    parts = taxon.split()
+    variants = [f'"{taxon}"']
+    if len(parts) > 2:
+        variants.append(f'"{parts[0]} {parts[1]}"')
+    return variants
+
+
+def gap_fill_commons(taxa: list[str], profile: str = "research",
+                     rate_limit: float = 2.0, limit: int | None = None,
+                     progress_every: int = 50,
+                     include_sharealike: bool = False) -> dict[str, Any]:
+    """Commons fallback for species with no iNat candidate. Metadata-only search.
+
+    Returns manifest with found / still_missing / needs_review (ambiguous
+    licenses always go to manual review). With include_sharealike, CC BY-SA
+    files are accepted instead of quarantined; the decision is recorded in
+    the manifest (files used unmodified, attribution preserved).
+    """
+    from spider_bench.sources.commons import discover_files_sync
+    from spider_bench.sources.http import DEFAULT_USER_AGENT
+
+    accept, review = load_license_profile(profile)
+    sa = {"CC-BY-SA-4.0", "CC-BY-SA-3.0", "CC-BY-SA-2.5"}
+    if include_sharealike:
+        accept = set(accept) | sa
+        review = set(review) - sa
+    names = taxa[:limit] if limit else taxa
+    found: list[dict] = []
+    review_list: list[dict] = []
+    missing: list[str] = []
+    with httpx.Client(headers={"User-Agent": DEFAULT_USER_AGENT}) as client:
+        for i, name in enumerate(names, 1):
+            records: list[dict] = []
+            try:
+                for variant in _search_variants(name):
+                    batch, _ = discover_files_sync(search=variant, max_records=10,
+                                                   rate_limit=rate_limit, client=client)
+                    records.extend(batch)
+                    if batch:
+                        break
+            except Exception:
+                records = []
+            picked = None
+            for rec in records:
+                for m in rec.get("media") or []:
+                    lic = normalize_license(m.get("license"))
+                    if rec.get("needs_review") or lic in review:
+                        review_list.append({"taxon": name, "title": m.get("title"),
+                                            "license": lic, "reason": rec.get("review_reason") or "sharealike_or_ambiguous"})
+                        continue
+                    if lic in accept and m.get("media_url"):
+                        picked = {"taxon": name, "url": m["media_url"], "license": lic,
+                                  "creator": m.get("creator"), "observation_id": None,
+                                  "photo_id": m.get("title"), "attribution": m.get("attribution"),
+                                  "research_grade": False, "source": "commons",
+                                  "file_page": m.get("source_url")}
+                        break
+                if picked:
+                    break
+            if picked:
+                found.append(picked)
+            elif not any(r["taxon"] == name for r in review_list):
+                missing.append(name)
+            if i % progress_every == 0:
+                print(f"gap-fill: {i}/{len(names)} found={len(found)} review={len(review_list)} missing={len(missing)}", flush=True)
+            time.sleep(1.0 / max(rate_limit, 0.1))
+    return {"species_total": len(names), "found": len(found), "review": len(review_list),
+            "still_missing": len(missing), "candidates": found,
+            "review_list": review_list, "missing_taxa": missing,
+            "sharealike_decision": ("accepted-unmodified-with-attribution"
+                                    if include_sharealike else "quarantined-for-review")}
+
+
 def record_media_row(conn: sqlite3.Connection, *, taxon: str, s3_uri: str, public_url: str,
                      license: str, creator: str | None, attribution: str | None,
                      source: str, source_media_id: str, sha256: str,

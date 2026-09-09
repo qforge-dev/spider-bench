@@ -18,7 +18,14 @@ from typing import Any
 
 import httpx
 
-from spider_bench.sources.http import PageCursor, RateLimiter, apply_record_cap, fetch_json_async, fetch_json_sync
+from spider_bench.sources.http import (
+    DEFAULT_USER_AGENT,
+    PageCursor,
+    RateLimiter,
+    apply_record_cap,
+    fetch_json_async,
+    fetch_json_sync,
+)
 from spider_bench.storage.s3 import raw_metadata_key
 
 API_URL = "https://commons.wikimedia.org/w/api.php"
@@ -77,14 +84,15 @@ def detect_ambiguous_licenses(raw_text_blobs: list[str], parsed_license: str | N
     """Return (needs_review, reason). Multi/unknown licenses -> review."""
     blob = " ".join(b.lower() for b in raw_text_blobs if b)
     hits = sorted({m for m in AMBIGUOUS_LICENSE_MARKERS if m in blob})
-    multi = len(re.findall(r"cc-by(?:-nc)?(?:-sa)?", blob)) > 1 or ("multi-license" in blob) or ("dual" in blob)
+    distinct = set(re.findall(r"cc-by(?:-nc)?(?:-sa)?|cc-zero|cc0|gfdl", blob))
+    multi = len(distinct) > 1 or ("multi-license" in blob) or ("dual" in blob)
     if parsed_license is None:
         return True, "unknown-license" + (f" markers={hits}" if hits else "")
     if multi:
         return True, f"multi-license markers={hits}" if hits else "multi-license"
     if "gfdl" in blob and parsed_license != "gfdl":
         return True, "gfdl-dual-license"
-    if any(m in ("copyrighted", "fairuse", "fair-use", "permission", "unknown") for m in hits):
+    if any(m in ("fairuse", "fair-use", "permission", "unknown") for m in hits):
         return True, f"ambiguous markers={hits}"
     return False, None
 
@@ -103,9 +111,12 @@ def transform_file(page: dict, snapshot_date: str) -> dict[str, Any]:
     templates = [t.get("title", "") for t in (page.get("templates") or [])]
     blob_texts = [str(imageinfo.get("extmetadata", {}))] + categories + templates + [lic.get("license_short") or ""]
     needs_review, reason = detect_ambiguous_licenses(blob_texts, lic.get("license"))
-    # Explicit multi-template case: >1 distinct CC templates listed.
+    # Explicit multi-template case: >1 distinct CC license templates listed.
+    # Layout/flag helper templates (cc-*-layout, cc-country-flags) are not licenses.
     cc_templates = {t.lower().split(":")[-1].strip() for t in templates
-                    if "cc-" in t.lower() or "cc0" in t.lower() or "cc-zero" in t.lower()}
+                    if ("cc-" in t.lower() or "cc0" in t.lower() or "cc-zero" in t.lower())
+                    and not t.lower().rstrip().endswith("-layout")
+                    and "cc-country-flags" not in t.lower()}
     if len(cc_templates) > 1 and not needs_review:
         needs_review, reason = True, f"multi-license templates={sorted(cc_templates)}"
     return {
@@ -240,7 +251,7 @@ async def discover_files_async(
     snapshot = snapshot_today()
     out: list[dict[str, Any]] = []
     cont = cursor.extra.get("gsroffset") if cursor.extra else None
-    async with httpx.AsyncClient(timeout=timeout, headers={"User-Agent": "spider-bench/0.1 (metadata-only)"}) as client:
+    async with httpx.AsyncClient(timeout=timeout, headers={"User-Agent": DEFAULT_USER_AGENT}) as client:
         while len(out) < max_records:
             params = build_query_params(search=search, continue_token=cont)
             payload = await fetch_json_async(

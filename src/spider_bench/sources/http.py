@@ -6,6 +6,7 @@ bounded concurrency, retry with backoff, rate limiting, and record caps.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, TypeVar
@@ -13,6 +14,18 @@ from typing import Any, Awaitable, TypeVar
 import httpx
 
 T = TypeVar("T")
+
+# Wikimedia-family APIs reject generic/bot-like User-Agents (HTTP 403).
+# Keep this descriptive; override via SPIDER_BENCH_UA (see docs/local-operations.md).
+DEFAULT_USER_AGENT = os.environ.get(
+    "SPIDER_BENCH_UA",
+    "spider-bench/0.2 (Polish spider image dataset; "
+    "https://spiders-dataset-088543363904.s3.us-east-1.amazonaws.com/)",
+)
+
+
+def default_headers() -> dict[str, str]:
+    return {"User-Agent": DEFAULT_USER_AGENT}
 
 
 class RateLimiter:
@@ -76,12 +89,13 @@ def fetch_json_sync(
         return None
     own = client is None
     c = client or httpx.Client(timeout=timeout)
+    send_headers = headers if headers is not None else default_headers()
     try:
         for attempt in range(retries + 1):
             if rate_limiter is not None:
                 rate_limiter.acquire_sync()
             try:
-                r = c.get(url, params=params, headers=headers)
+                r = c.get(url, params=params, headers=send_headers)
             except Exception as e:  # noqa: BLE001
                 if should_retry_exc(e) and attempt < retries:
                     time.sleep(backoff_delay(attempt, backoff_base))
@@ -118,11 +132,12 @@ async def fetch_json_async(
         return None
 
     async def _do() -> dict | list:
+        send_headers = headers if headers is not None else default_headers()
         for attempt in range(retries + 1):
             if rate_limiter is not None:
                 await rate_limiter.acquire_async()
             try:
-                r = await client.get(url, params=params, headers=headers)
+                r = await client.get(url, params=params, headers=send_headers)
             except Exception as e:  # noqa: BLE001
                 if should_retry_exc(e) and attempt < retries:
                     await asyncio.sleep(backoff_delay(attempt, backoff_base))

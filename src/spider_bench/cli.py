@@ -287,7 +287,7 @@ def discover_commons(
     cfg = _cfg(config)
     cursor_path = Path(f"data/work/cursors/commons-{country}.json")
     cursor = _load_resume(cursor_path) if resume else {}
-    records, nxt = _discover(query=query, max_records=max_records,
+    records, nxt = _discover(search=query, max_records=max_records,
                              resume=cursor or None, rate_limit=rate_limit, dry_run=dry_run)
     typer.echo(f"commons query={query!r} fetched={len(records)} dry_run={dry_run}")
     if dry_run:
@@ -500,6 +500,70 @@ def media_collect_one(
                          observation_id=str(c.get("observation_id", "")),
                          quality_grade="research" if c.get("research_grade") else None,
                          sha256=r.sha256 or "")
+    n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
+    typer.echo(f"media accepted in db: {n}")
+    conn.close()
+
+
+@media_app.command("gap-fill")
+def media_gap_fill(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    input: str = typer.Option("data/work/one-per-species.json", "--input"),
+    profile: str = typer.Option("research", "--profile"),
+    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
+    download: bool = typer.Option(True, "--download/--no-download"),
+    out: str = typer.Option("data/work/gap-fill.json", "--out"),
+    include_sharealike: bool = typer.Option(False, "--include-sharealike"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Commons fallback for species with no iNat candidate (1 image each).
+
+    Ambiguous files always go to a review list. ShareAlike files are
+    quarantined unless --include-sharealike (decision recorded in manifest;
+    files used unmodified with attribution preserved).
+    """
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+    from spider_bench.media.collect_one import gap_fill_commons, record_media_row
+    from spider_bench.media.download import DownloadItem, download_selected
+    from spider_bench.storage.s3 import public_url as _public_url
+
+    cfg = _cfg(config)
+    data = json.loads(Path(input).read_text(encoding="utf-8"))
+    missing = data.get("missing_taxa", [])
+    if max_species:
+        missing = missing[:max_species]
+    typer.echo(f"gap-fill missing={len(missing)} profile={profile} download={download} dry_run={dry_run}")
+    manifest = gap_fill_commons(missing, profile=profile, rate_limit=rate_limit,
+                                include_sharealike=include_sharealike)
+    typer.echo(f"found={manifest['found']} review={manifest['review']} still_missing={manifest['still_missing']}")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    s3 = s3mod.s3_client(cfg.aws.region)
+    date = __import__("datetime").date.today().isoformat()
+    s3.put_object(Bucket=cfg.aws.bucket, Key=f"{cfg.aws.prefix}work/gap-fill-{date}.json",
+                  Body=json.dumps(manifest, indent=2).encode(), ContentType="application/json")
+    if dry_run or not download:
+        return
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    items = [DownloadItem(url=c["url"], license=c["license"], taxon=c["taxon"],
+                          source="commons", source_media_id=str(c.get("photo_id")))
+             for c in manifest["candidates"]]
+    results = download_selected(items, bucket=cfg.aws.bucket, prefix=cfg.aws.prefix,
+                                region=cfg.aws.region, s3_client=s3, conn=conn)
+    ok = [r for r in results if r.ok]
+    typer.echo(f"downloaded={len(ok)}/{len(results)}")
+    by_url = {c["url"]: c for c in manifest["candidates"]}
+    for r in ok:
+        c = by_url.get(r.url, {})
+        record_media_row(conn, taxon=c.get("taxon", ""), s3_uri=f"s3://{cfg.aws.bucket}/{r.s3_key}",
+                         public_url=_public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
+                         license=c.get("license", ""), creator=c.get("creator"),
+                         attribution=c.get("attribution"), source="commons",
+                         source_media_id=str(c.get("photo_id")),
+                         observation_id=str(c.get("photo_id")), sha256=r.sha256 or "")
     n = conn.execute("SELECT COUNT(*) FROM media WHERE validation_status='accepted'").fetchone()[0]
     typer.echo(f"media accepted in db: {n}")
     conn.close()
