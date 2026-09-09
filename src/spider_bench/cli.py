@@ -1088,9 +1088,9 @@ def benchmark_split(
     _migrated(conn)
     cols = ("m.sha256, m.s3_uri, m.public_url, m.source, m.source_media_id,"
             " o.source_taxon AS taxon, o.id AS observation_id, o.country_code AS country,"
-            " t.family AS family")
+            " t.family AS family, m.width AS width")
     rows = [dict(zip(("sha256", "s3_uri", "public_url", "source", "source_media_id",
-                       "taxon", "observation_id", "country", "family"),
+                       "taxon", "observation_id", "country", "family", "width"),
                       r)) for r in conn.execute(
         f"""SELECT {cols} FROM media m JOIN observations o ON o.id=m.observation_id
             LEFT JOIN taxa t ON t.id=o.taxon_id

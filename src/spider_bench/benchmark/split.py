@@ -20,8 +20,12 @@ def split_gallery_query(rows: list[dict[str, Any]], *,
     rng = random.Random(seed)
     gallery, query = [], []
     for taxon, items in by_taxon.items():
-        # gallery: earliest by source_media_id for determinism
-        ordered = sorted(items, key=lambda x: str(x.get("source_media_id", "")))
+        # gallery: first full-size image (earliest photo id), else earliest thumb
+        def _rank(r: dict) -> tuple:
+            w = r.get("width") or 0
+            return (0 if w >= 150 else 1, str(r.get("source_media_id", "")))
+
+        ordered = sorted(items, key=_rank)
         gallery.append({**ordered[0], "split": "gallery"})
         rest = [o for o in ordered[1:] if o.get("sha256") != ordered[0].get("sha256")
                 and o.get("observation_id") != ordered[0].get("observation_id")]
