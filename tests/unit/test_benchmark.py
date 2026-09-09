@@ -302,3 +302,21 @@ def test_run_report_page(tmp_path):
     out = write_run_report(d, tasks)
     html = out.read_text()
     assert "<img" in html and "Aa a" in html
+
+
+def test_run_report_marks_wrong_answers_miss(tmp_path):
+    import json
+
+    from spider_bench.benchmark.report import write_run_report
+
+    tasks = _mini()
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+              "image_sha256": t["image_sha256"],
+              "predictions": [{"taxon": "Wrong name", "score": 1.0, "matched": False}],
+              "error": None} for t in tasks]
+    d = tmp_path / "r2"
+    d.mkdir()
+    (d / "predictions.jsonl").write_text("\n".join(json.dumps(p) for p in preds))
+    (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r2"}))
+    html = write_run_report(d, tasks).read_text()
+    assert "✓" not in html and html.count("✗") == len(tasks)

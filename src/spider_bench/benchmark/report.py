@@ -5,6 +5,8 @@ import html
 from pathlib import Path
 from typing import Any
 
+from spider_bench.benchmark.scorer import is_correct
+
 
 def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, Any]],
                       manifest: dict[str, Any]) -> str:
@@ -14,13 +16,18 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
     for p in predictions:
         t = by_id.get(p.get("task_id", ""), {})
         pred = (p.get("predictions") or [{}])[0]
-        ok = pred.get("matched")
+        if p.get("error"):
+            badge, cls = "ERR", "miss"
+        elif pred.get("matched") and is_correct(t, pred.get("taxon", "")):
+            badge, cls = "✓", "ok"
+        else:
+            badge, cls = "✗", "miss"
         img = t.get("image_public_url", "")
         cards.append(
-            f"<div class='card {'ok' if ok else 'miss'}'>"
+            f"<div class='card {cls}'>"
             f"<a href='{img}'><img loading='lazy' src='{img}' alt=''></a>"
             f"<div><b><i>{html.escape(t.get('correct_taxon', '?'))}</i></b>"
-            f"<span class='badge'>{'✓' if ok else ('ERR' if p.get('error') else '✗')}</span></div>"
+            f"<span class='badge'>{badge}</span></div>"
             f"<div class='pred'>→ <i>{html.escape(str(pred.get('taxon') or '(no answer)'))}</i></div>"
             f"<div class='meta'>{html.escape(t.get('task_id', ''))}"
             f"{' · ' + html.escape(str(p.get('error', ''))[:120]) if p.get('error') else ''}</div>"
@@ -36,7 +43,8 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         ".card.ok{border-color:#16a34a}.card.miss{border-color:#dc2626}"
         ".card img{width:100%;height:150px;object-fit:cover;display:block}"
         ".badge{float:right;font-weight:bold}.ok .badge{color:#16a34a}.miss .badge{color:#dc2626}"
-        ".pred{font-size:14px}.meta{font-size:12px;color:#666;word-break:break-all}</style></head><body>"
+        ".pred{font-size:14px}.meta{font-size:12px;color:#666;word-break:break-all}"
+        ".legend{font-size:13px;color:#444}</style></head><body>"
         f"<h1>{html.escape(mid)} <small>{html.escape(manifest.get('run_id', ''))}</small></h1>"
         f"<p>{len(cards)} samples · cost ${manifest.get('estimated_cost_usd') or '-'} · "
         f"tasks <code>{html.escape(str(manifest.get('tasks_hash', ''))[:12])}</code></p>"
