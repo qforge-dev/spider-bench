@@ -8,6 +8,7 @@ from typing import Optional
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from spider_bench.config import load_country_config
 from spider_bench.db import init_db
 from spider_bench.storage import s3 as s3mod
 
