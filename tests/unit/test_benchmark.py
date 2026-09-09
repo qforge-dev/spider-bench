@@ -105,3 +105,88 @@ def test_collect_n_skips_known_observations():
     finally:
         httpx.Client = _orig
     assert [c["observation_id"] for c in m["candidates"]] == [2]
+
+
+def test_registry_resolves_env_and_hides_secrets(tmp_path, monkeypatch):
+    from spider_bench.benchmark.registry import describe_registry, load_registry, resolve_model
+
+    (tmp_path / "m.yaml").write_text(
+        "id: terra\nadapter: openai-compatible\nbase_url_env: T_BASE\n"
+        "api_key_env: T_KEY\nmodel_env: T_MODEL\nmodel: placeholder\n"
+        "price_per_1k_requests: 0.5\n")
+    monkeypatch.setenv("T_KEY", "sekret")
+    monkeypatch.setenv("T_MODEL", "terra-1")
+    reg = load_registry(tmp_path)
+    r = resolve_model(reg["terra"])
+    assert r["model"] == "terra-1" and r["has_key"] is True
+    assert "sekret" not in str(describe_registry(tmp_path))
+    monkeypatch.delenv("T_KEY")
+    try:
+        resolve_model(reg["terra"])
+        raise AssertionError("expected missing-key error")
+    except RuntimeError:
+        pass
+
+
+def test_api_adapter_parses_and_tracks_cost(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter, match_candidate
+
+    assert match_candidate("Araneus diadematus", ["Pisaura mirabilis", "Araneus diadematus"]) == ("Araneus diadematus", True)
+    assert match_candidate("Araneus diadematus (nice spider)", ["Araneus diadematus"])[1] is True
+    assert match_candidate("a mushroom", ["Araneus diadematus"])[1] is False
+
+    calls = []
+
+    def fake_post(url, body, headers):
+        calls.append((url, body, headers))
+        assert "sekret" not in str(body)
+        return {"choices": [{"message": {"content": "Bb b"}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 5}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    a = OpenAICompatAdapter({"id": "t", "base_url": "https://x/v1", "model": "m",
+                             "key_env": "T_KEY", "temperature": 0.0, "max_output_tokens": 10,
+                             "price_per_1k_requests": 1.0, "price_input_1k_tokens": 2.0,
+                             "price_output_1k_tokens": 4.0}, post=fake_post)
+    preds = a.predict(b"img", {"candidates": ["Aa a", "Bb b"], "image_public_url": "https://x/i.jpg"})
+    assert preds[0]["taxon"] == "Bb b" and preds[0]["matched"] is True
+    assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5}
+    assert a.estimated_cost() == 1 / 1000 * 1.0 + 100 / 1000 * 2.0 + 5 / 1000 * 4.0
+    assert "Authorization" in calls[0][2]
+
+
+def test_budget_stops_run_early(tmp_path):
+    from spider_bench.benchmark.runner import run_tasks
+
+    class Priced:
+        model_id = "priced"
+
+        def __init__(self):
+            self.n = 0
+
+        def predict(self, image_bytes, context):
+            self.n += 1
+            return [{"taxon": "Aa a", "score": 1.0}]
+
+        def estimated_cost(self):
+            return self.n * 1.0
+
+    tasks = _mini()
+    out = tmp_path / "p.jsonl"
+    s = run_tasks(tasks, Priced(), out, loader=lambda t: b"x", max_cost=1.0)
+    assert s["wrote"] == 1 and s.get("stopped_early")
+
+
+def test_leaderboard_sorts_by_top1(tmp_path):
+    import json
+
+    from spider_bench.benchmark.leaderboard import collect_runs, render_leaderboard
+
+    for rid, top1 in (("r-good", 0.9), ("r-bad", 0.1)):
+        d = tmp_path / rid
+        d.mkdir()
+        (d / "scores.json").write_text(json.dumps({"scored": 10, "top1": top1, "top5": 1.0, "errors": 0}))
+        (d / "manifest.json").write_text(json.dumps({"model_id": rid, "suite": "s"}))
+    md, rows = render_leaderboard(collect_runs(tmp_path))
+    assert [r["run_id"] for r in rows] == ["r-good", "r-bad"]
+    assert "| 1 | r-good |" in md

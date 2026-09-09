@@ -862,21 +862,39 @@ def benchmark_build_tasks(
 def benchmark_run(
     tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
     model: str = typer.Option("constant-reference", "--model"),
+    registry: str = typer.Option("configs/models", "--registry"),
     out: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--out"),
     timeout: float = typer.Option(120.0, "--timeout"),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
     image_source: str = typer.Option("s3", "--image-source", help="s3|none (none passes empty bytes)"),
     max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
+    max_cost: Optional[float] = typer.Option(None, "--max-cost", help="USD ceiling (API models); stops early"),
+    run_id: str = typer.Option("run-1", "--run-id"),
+    suite: str = typer.Option("species-id-closed-v1", "--suite"),
 ) -> None:
-    """Run a reference model over tasks (real model adapters plug in here)."""
+    """Run a model over tasks. API keys from env only. Writes run manifest next to predictions."""
+    import datetime as _dt
+
     from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
     from spider_bench.benchmark.runner import run_tasks
     from spider_bench.benchmark.tasks import read_tasks
 
-    adapters = {"perfect-reference": PerfectAdapter(),
-                "constant-reference": ConstantAdapter()}
+    adapters: dict = {"perfect-reference": PerfectAdapter(),
+                      "constant-reference": ConstantAdapter()}
+    manifest_extra: dict = {"suite": suite, "run_id": run_id}
     if model not in adapters:
-        raise typer.BadParameter(f"--model must be one of {sorted(adapters)} (real adapters land in M3)")
+        from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+        from spider_bench.benchmark.registry import load_registry, resolve_model
+
+        reg = load_registry(registry)
+        if model not in reg:
+            raise typer.BadParameter(f"unknown model '{model}'; registry has {sorted(reg)}")
+        resolved = resolve_model(reg[model])  # raises if key env missing; never logs the key
+        adapters[model] = OpenAICompatAdapter(resolved)
+        manifest_extra["pricing_usd"] = {
+            "per_1k_requests": resolved["price_per_1k_requests"],
+            "input_1k_tokens": resolved["price_input_1k_tokens"],
+            "output_1k_tokens": resolved["price_output_1k_tokens"]}
     rows = read_tasks(tasks)
     if max_tasks:
         rows = rows[:max_tasks]
@@ -897,7 +915,17 @@ def benchmark_run(
         p.write_bytes(r.content)
         return r.content
 
-    summary = run_tasks(rows, adapters[model], out, loader=loader, timeout_s=timeout, resume=resume)
+    adapter = adapters[model]
+    summary = run_tasks(rows, adapter, out, loader=loader, timeout_s=timeout,
+                        resume=resume, max_cost=max_cost)
+    manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
+                "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
+                "usage": summary.get("usage", {}),
+                "estimated_cost_usd": summary.get("estimated_cost_usd"),
+                "errors": summary["errors"],
+                "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    (Path(out).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -976,17 +1004,49 @@ def benchmark_publish(
     typer.echo(f"published {result['complete_key']} keys={len(result['keys'])} dry_run={dry_run}")
 
 
+@benchmark_app.command("models")
+def benchmark_models(
+    registry: str = typer.Option("configs/models", "--registry"),
+) -> None:
+    """List registered models (safe: key presence only, never values)."""
+    from spider_bench.benchmark.registry import describe_registry
+
+    for r in describe_registry(registry):
+        typer.echo(json.dumps(r, sort_keys=True))
+
+
 @benchmark_app.command("score")
 def benchmark_score(
     tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
     predictions: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--predictions"),
+    out: Optional[str] = typer.Option(None, "--out", help="write scores.json here"),
 ) -> None:
     """Score predictions against tasks (pure, offline)."""
     from spider_bench.benchmark.runner import read_predictions
     from spider_bench.benchmark.scorer import score
     from spider_bench.benchmark.tasks import read_tasks
 
-    typer.echo(json.dumps(score(read_tasks(tasks), read_predictions(predictions)), indent=2))
+    scores = score(read_tasks(tasks), read_predictions(predictions))
+    typer.echo(json.dumps(scores, indent=2))
+    if out:
+        Path(out).write_text(json.dumps(scores, indent=2), encoding="utf-8")
+        typer.echo(f"wrote {out}")
+
+
+@benchmark_app.command("leaderboard")
+def benchmark_leaderboard(
+    runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
+    out: str = typer.Option("data/benchmarks/leaderboard.md", "--out"),
+) -> None:
+    """Render a static leaderboard from run dirs (each needs scores.json)."""
+    from spider_bench.benchmark.leaderboard import collect_runs, render_leaderboard
+
+    runs = collect_runs(runs_dir)
+    md, rows = render_leaderboard(runs)
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    Path(out).write_text(md, encoding="utf-8")
+    Path(str(out).replace(".md", ".json")).write_text(json.dumps(rows, indent=2), encoding="utf-8")
+    typer.echo(f"runs={len(rows)} wrote={out}")
 
 
 if __name__ == "__main__":

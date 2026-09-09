@@ -1,0 +1,21 @@
+# Model registry: one file per model. Secrets ONLY via env (never committed).
+# Copy this template for a new model.
+id: terra
+display_name: Terra (vision)
+adapter: openai-compatible
+# Endpoint + credentials (env names; values never touch disk/logs).
+base_url_env: TERRA_BASE_URL        # default https://api.openai.com/v1 if unset
+api_key_env: TERRA_API_KEY
+model_env: TERRA_MODEL              # default below
+model: gpt-5-vision-placeholder     # <-- set real model name (or TERRA_MODEL env)
+# Ask the model for exactly one candidate-list name.
+max_output_tokens: 50
+temperature: 0.0
+# Pricing in USD (fill from provider page; used ONLY for --max-cost guards).
+price_per_1k_requests: 0.01
+price_input_1k_tokens: 0.005
+price_output_1k_tokens: 0.015
+# Runner limits.
+timeout_s: 120
+max_tasks_default: 100
+notes: Placeholder values — confirm model name + pricing before any paid run.

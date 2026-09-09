@@ -1,0 +1,15 @@
+id: luna
+display_name: Luna (vision)
+adapter: openai-compatible
+base_url_env: LUNA_BASE_URL
+api_key_env: LUNA_API_KEY
+model_env: LUNA_MODEL
+model: gpt-5-mini-vision-placeholder   # <-- set real model name (or LUNA_MODEL env)
+max_output_tokens: 50
+temperature: 0.0
+price_per_1k_requests: 0.005
+price_input_1k_tokens: 0.002
+price_output_1k_tokens: 0.008
+timeout_s: 120
+max_tasks_default: 100
+notes: Placeholder values — confirm model name + pricing before any paid run.
