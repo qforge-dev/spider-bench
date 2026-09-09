@@ -7,7 +7,7 @@ adapter: bedrock-converse
 region_env: FABLE_REGION
 region: us-east-1
 model_env: FABLE_MODEL
-model: fable                  # <-- exact Bedrock model ID (check console if calls fail)
+model: global.anthropic.claude-fable-5-1
 # Ask the model for exactly one candidate-list name.
 max_output_tokens: 2000
 # temperature omitted: reasoning-class models only accept the default
