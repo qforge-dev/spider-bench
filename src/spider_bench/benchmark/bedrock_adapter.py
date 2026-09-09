@@ -41,8 +41,12 @@ class BedrockAdapter:
 
     def estimated_cost(self) -> float:
         t = self.totals
+        cached = t.get("cached_input_tokens", 0)
+        fresh_in = max(t["input_tokens"] - cached, 0)
         return (t["requests"] / 1000 * self._cfg.get("price_per_1k_requests", 0.0)
-                + t["input_tokens"] / 1000 * self._cfg.get("price_input_1k_tokens", 0.0)
+                + fresh_in / 1000 * self._cfg.get("price_input_1k_tokens", 0.0)
+                + cached / 1000 * self._cfg.get("price_cached_1k_tokens",
+                                                self._cfg.get("price_input_1k_tokens", 0.0))
                 + t["output_tokens"] / 1000 * self._cfg.get("price_output_1k_tokens", 0.0))
 
     def predict(self, image_bytes: bytes, context: dict[str, Any]) -> list[dict[str, Any]]:
@@ -77,6 +81,8 @@ inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
         self.totals["requests"] += 1
         self.totals["input_tokens"] += int(usage.get("inputTokens", 0) or 0)
         self.totals["output_tokens"] += int(usage.get("outputTokens", 0) or 0)
+        self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
+            usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)
         taxon, matched = match_candidate(text, cands)
         return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
                  "matched": matched, "raw": text[:200]}]
