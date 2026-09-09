@@ -708,27 +708,33 @@ def media_upgrade_urls(
         return
     s3 = s3mod.s3_client(cfg.aws.region)
     done = failed = 0
+    sizes = ("large", "medium", "original")
     for mid, photo_id in rows:
-        url = f"https://inaturalist-open-data.s3.amazonaws.com/photos/{photo_id}/large.jpg"
-        res = download_selected(
-            [DownloadItem(url=url, source="inaturalist", source_media_id=str(photo_id))],
-            bucket=cfg.aws.bucket, prefix=cfg.aws.prefix, region=cfg.aws.region,
-            s3_client=s3, conn=None)
-        r = res[0]
-        if r.ok and r.sha256:
+        got = None
+        for size in sizes:
+            url = f"https://inaturalist-open-data.s3.amazonaws.com/photos/{photo_id}/{size}.jpg"
+            res = download_selected(
+                [DownloadItem(url=url, source="inaturalist", source_media_id=str(photo_id))],
+                bucket=cfg.aws.bucket, prefix=cfg.aws.prefix, region=cfg.aws.region,
+                s3_client=s3, conn=None)
+            r = res[0]
+            if r.ok and r.sha256:
+                got = r
+                break
+        if got is not None:
             conn.execute(
                 """UPDATE media SET sha256=?, s3_uri=?, public_url=?, width=?, height=?
                    WHERE id=? AND validation_status='accepted'""",
-                (r.sha256, f"s3://{cfg.aws.bucket}/{r.s3_key}",
-                 _public_url(cfg.aws.bucket, cfg.aws.region, r.s3_key or ""),
-                 r.width, r.height, mid))
+                (got.sha256, f"s3://{cfg.aws.bucket}/{got.s3_key}",
+                 _public_url(cfg.aws.bucket, cfg.aws.region, got.s3_key or ""),
+                 got.width, got.height, mid))
             conn.commit()
             done += 1
         else:
             failed += 1
         if (done + failed) % 100 == 0:
             typer.echo(f"upgraded {done} failed {failed}", err=True)
-    typer.echo(f"upgraded={done} failed={failed}")
+    typer.echo(f"upgraded={done} failed={failed} (failed rows keep their thumbnails)")
     conn.close()
 
 
