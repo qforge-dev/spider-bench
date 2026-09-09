@@ -8,7 +8,6 @@ from typing import Optional
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 
-from spider_bench.config import load_country_config
 from spider_bench.db import init_db
 from spider_bench.storage import s3 as s3mod
 
@@ -31,8 +30,24 @@ app.add_typer(release_app, name="release")
 app.add_typer(benchmark_app, name="benchmark")
 
 
-def _cfg(config: str):
-    return load_country_config(config)
+def _suite_tasks(suite: str, tasks: str | None) -> Path:
+    """Explicit --tasks wins; otherwise <suite>/query/tasks.jsonl, then <suite>/tasks.jsonl."""
+    if tasks:
+        return Path(tasks)
+    base = Path("data/benchmarks") / suite
+    for cand in (base / "query" / "tasks.jsonl", base / "tasks.jsonl"):
+        if cand.exists():
+            return cand
+    return base / "query" / "tasks.jsonl"
+
+
+def _run_predictions(run_id: str | None, out: str | None, model: str) -> tuple[str, Path]:
+    """Explicit --out wins; otherwise runs/<run-id>/predictions.jsonl (auto run-id)."""
+    if out:
+        p = Path(out)
+        return run_id or p.parent.name, p
+    rid = run_id or f"{model}-{__import__('datetime').datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    return rid, Path("data/benchmarks/runs") / rid / "predictions.jsonl"
 
 
 @app.command()
@@ -860,19 +875,19 @@ def benchmark_build_tasks(
 
 @benchmark_app.command("run")
 def benchmark_run(
-    tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
+    tasks: Optional[str] = typer.Option(None, "--tasks"),
     model: str = typer.Option("constant-reference", "--model"),
     registry: str = typer.Option("configs/models", "--registry"),
-    out: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--out"),
+    out: Optional[str] = typer.Option(None, "--out"),
     timeout: float = typer.Option(120.0, "--timeout"),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
     image_source: str = typer.Option("s3", "--image-source", help="s3|none (none passes empty bytes)"),
     max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
     max_cost: Optional[float] = typer.Option(None, "--max-cost", help="USD ceiling (API models); stops early"),
-    run_id: str = typer.Option("run-1", "--run-id"),
-    suite: str = typer.Option("species-id-closed-v1", "--suite"),
+    run_id: Optional[str] = typer.Option(None, "--run-id"),
+    suite: str = typer.Option("species-id-v2", "--suite"),
 ) -> None:
-    """Run a model over tasks. API keys from env only. Writes run manifest next to predictions."""
+    """Run a model over tasks. Paths resolve from --suite/--run-id; keys from env only."""
     import datetime as _dt
 
     from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
@@ -881,6 +896,7 @@ def benchmark_run(
 
     adapters: dict = {"perfect-reference": PerfectAdapter(),
                       "constant-reference": ConstantAdapter()}
+    run_id, out_path = _run_predictions(run_id, out, model)
     manifest_extra: dict = {"suite": suite, "run_id": run_id}
     if model not in adapters:
         from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
@@ -895,7 +911,7 @@ def benchmark_run(
             "per_1k_requests": resolved["price_per_1k_requests"],
             "input_1k_tokens": resolved["price_input_1k_tokens"],
             "output_1k_tokens": resolved["price_output_1k_tokens"]}
-    rows = read_tasks(tasks)
+    rows = read_tasks(_suite_tasks(suite, tasks))
     if max_tasks:
         rows = rows[:max_tasks]
 
@@ -916,7 +932,7 @@ def benchmark_run(
         return r.content
 
     adapter = adapters[model]
-    summary = run_tasks(rows, adapter, out, loader=loader, timeout_s=timeout,
+    summary = run_tasks(rows, adapter, out_path, loader=loader, timeout_s=timeout,
                         resume=resume, max_cost=max_cost)
     manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
                 "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
@@ -924,8 +940,8 @@ def benchmark_run(
                 "estimated_cost_usd": summary.get("estimated_cost_usd"),
                 "errors": summary["errors"],
                 "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    (Path(out).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    (Path(out_path).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -1017,20 +1033,34 @@ def benchmark_models(
 
 @benchmark_app.command("score")
 def benchmark_score(
-    tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
-    predictions: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--predictions"),
-    out: Optional[str] = typer.Option(None, "--out", help="write scores.json here"),
+    tasks: Optional[str] = typer.Option(None, "--tasks"),
+    predictions: Optional[str] = typer.Option(None, "--predictions"),
+    suite: str = typer.Option("species-id-v2", "--suite"),
+    run_id: Optional[str] = typer.Option(None, "--run-id"),
+    out: Optional[str] = typer.Option(None, "--out", help="write scores.json here (default: beside predictions)"),
 ) -> None:
-    """Score predictions against tasks (pure, offline)."""
+    """Score predictions against tasks (pure, offline). Paths resolve from --suite/--run-id."""
     from spider_bench.benchmark.runner import read_predictions
     from spider_bench.benchmark.scorer import score
     from spider_bench.benchmark.tasks import read_tasks
 
-    scores = score(read_tasks(tasks), read_predictions(predictions))
+    tasks_path = _suite_tasks(suite, tasks)
+    if predictions:
+        pred_path = Path(predictions)
+    elif run_id:
+        pred_path = Path("data/benchmarks/runs") / run_id / "predictions.jsonl"
+    else:
+        # latest run dir by mtime
+        runs = sorted(Path("data/benchmarks/runs").glob("*/predictions.jsonl"),
+                      key=lambda p: p.stat().st_mtime)
+        if not runs:
+            raise typer.BadParameter("no runs found; pass --predictions or --run-id")
+        pred_path = runs[-1]
+    scores = score(read_tasks(tasks_path), read_predictions(pred_path))
     typer.echo(json.dumps(scores, indent=2))
-    if out:
-        Path(out).write_text(json.dumps(scores, indent=2), encoding="utf-8")
-        typer.echo(f"wrote {out}")
+    out_path = Path(out) if out else pred_path.parent / "scores.json"
+    out_path.write_text(json.dumps(scores, indent=2), encoding="utf-8")
+    typer.echo(f"wrote {out_path}")
 
 
 @benchmark_app.command("leaderboard")
