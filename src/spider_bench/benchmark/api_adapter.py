@@ -8,6 +8,7 @@ Token usage accumulates in .totals for cost guards. HTTP layer injectable.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Callable
 
 
@@ -16,16 +17,34 @@ def _norm(name: str) -> str:
 
 
 def match_candidate(text: str, candidates: list[str]) -> tuple[str, bool]:
-    """Match free-text reply to a candidate. Returns (taxon, matched)."""
-    first_line = (text or "").strip().splitlines()[0].strip().strip("*.\"'") if text.strip() else ""
-    normed = { _norm(c): c for c in candidates }
-    if _norm(first_line) in normed:
-        return normed[_norm(first_line)], True
-    # tolerate "Genus species (comment)" prefix form
-    head = " ".join(_norm(first_line).split()[:2])
-    if head in normed:
-        return normed[head], True
-    return first_line[:200], False
+    """Match free-text reply to a candidate. Returns (taxon, matched).
+
+    Reasoning models bury the answer in prose: scan every line for a
+    candidate mention (exact or 'Genus species (…)' head form) and take the
+    LAST match — conclusions come after reasoning. Single-name replies
+    behave exactly as before.
+    """
+    normed = {_norm(c): c for c in candidates}
+    lines = (text or "").strip().splitlines() or [""]
+    found: str | None = None
+    for raw_line in lines:
+        line = raw_line.strip().strip("* .\"'")
+        if not line:
+            continue
+        if _norm(line) in normed:
+            found = normed[_norm(line)]
+            continue
+        head = " ".join(_norm(line).split()[:2])
+        if head in normed:
+            found = normed[head]
+            continue
+        for cand_norm, cand in normed.items():
+            if cand_norm and re.search(rf"(?<![a-z]){re.escape(cand_norm)}(?![a-z])", _norm(line)):
+                found = cand
+    if found is not None:
+        return found, True
+    first = lines[0].strip().strip("* .\"'") if lines else ""
+    return first[:200], False
 
 
 class OpenAICompatAdapter:

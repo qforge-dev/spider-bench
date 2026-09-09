@@ -54,7 +54,7 @@ class BedrockAdapter:
         system_text = ((context.get("prompt") or "Identify the spider species in this photograph.")
                        + f" Valid answers ({len(cands)}): " + "; ".join(cands))
         user_text = ("Identify the spider in this photograph. "
-                     "Reply with exactly one scientific name from the candidate list.")
+                     "Reply with ONLY the scientific name, nothing else.")
         try:
             resp = self._get_client().converse(
                 modelId=self._cfg["model"],

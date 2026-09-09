@@ -214,6 +214,17 @@ def test_leaderboard_sorts_by_top1(tmp_path):
     assert "| 1 | r-good |" in md
 
 
+def test_match_finds_answer_buried_in_reasoning():
+    from spider_bench.benchmark.api_adapter import match_candidate
+
+    cands = ["Aa a", "Bb b"]
+    assert match_candidate("Aa a", cands) == ("Aa a", True)
+    prose = ("Small spider on a leaf, dark body. Looks like a dictynid. "
+             "I conclude this is Bb b, though Aa a is similar.")
+    assert match_candidate(prose, cands) == ("Bb b", True)
+    assert match_candidate("a mushroom", cands)[1] is False
+
+
 def test_gpt5_params_omit_temperature(monkeypatch):
     from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
 
