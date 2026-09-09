@@ -150,7 +150,8 @@ def test_api_adapter_parses_and_tracks_cost(monkeypatch):
                              "price_output_1k_tokens": 4.0}, post=fake_post)
     preds = a.predict(b"img", {"candidates": ["Aa a", "Bb b"], "image_public_url": "https://x/i.jpg"})
     assert preds[0]["taxon"] == "Bb b" and preds[0]["matched"] is True
-    assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5}
+    assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5,
+                          "cached_input_tokens": 0}
     assert a.estimated_cost() == 1 / 1000 * 1.0 + 100 / 1000 * 2.0 + 5 / 1000 * 4.0
     assert "Authorization" in calls[0][2]
 
@@ -338,3 +339,26 @@ def test_run_report_header_percentages(tmp_path):
     (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r3"}))
     html = write_run_report(d, tasks, {"Aa a": "F1", "Bb b": "F1"}).read_text()
     assert "top-1 100.0%" in html and "genus 100.0%" in html and "family 100.0%" in html
+
+
+def test_system_message_holds_candidates(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen["messages"] = body["messages"]
+        return {"choices": [{"message": {"content": "Aa a"}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    a = OpenAICompatAdapter({"id": "s", "base_url": "https://x/v1", "model": "m",
+                             "key_env": "T_KEY", "temperature": None,
+                             "token_param": "max_tokens", "max_output_tokens": 10,
+                             "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                             "price_output_1k_tokens": 0.0}, post=fake_post)
+    a.predict(b"", {"candidates": ["Aa a", "Bb b"],
+                    "prompt": "Pick one.",
+                    "image_public_url": "https://x/i.jpg"})
+    sys_msg, user_msg = seen["messages"]
+    assert sys_msg["role"] == "system" and "Aa a" in sys_msg["content"] and "Bb b" in sys_msg["content"]
+    assert user_msg["role"] == "user" and "Aa a" not in str(user_msg)

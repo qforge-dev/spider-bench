@@ -43,9 +43,19 @@ class OpenAICompatAdapter:
 
     def estimated_cost(self) -> float:
         t = self.totals
+        cached = t.get("cached_input_tokens", 0)
+        fresh_in = max(t["input_tokens"] - cached, 0)
         return (t["requests"] / 1000 * self._cfg["price_per_1k_requests"]
-                + t["input_tokens"] / 1000 * self._cfg["price_input_1k_tokens"]
+                + fresh_in / 1000 * self._cfg["price_input_1k_tokens"]
+                + cached / 1000 * self._cfg.get("price_cached_1k_tokens",
+                                                self._cfg["price_input_1k_tokens"])
                 + t["output_tokens"] / 1000 * self._cfg["price_output_1k_tokens"])
+
+    def _system_prompt(self, context: dict[str, Any]) -> str:
+        """Static across all tasks: instruction + full candidate list (cacheable prefix)."""
+        cands = context.get("candidates", [])
+        return ((context.get("prompt") or "Identify the spider species in this photograph.")
+                + f" Valid answers ({len(cands)}): " + "; ".join(cands))
 
     def _prompt(self, context: dict[str, Any]) -> str:
         cands = context.get("candidates", [])
@@ -57,16 +67,24 @@ class OpenAICompatAdapter:
 
         import httpx
 
+        # Static system message first: identical across tasks, so providers
+        # cache it (candidate list ~5k tokens). Per-image content stays in user.
+        system_text = self._system_prompt(context)
+        user_text = ("Identify the spider in this photograph. "
+                     "Reply with exactly one scientific name from the candidate list.")
         if context.get("image_public_url"):
-            content = [{"type": "text", "text": self._prompt(context)},
-                       {"type": "image_url", "image_url": {"url": context["image_public_url"]}}]
+            user_content: list[dict[str, Any]] = [
+                {"type": "text", "text": user_text},
+                {"type": "image_url", "image_url": {"url": context["image_public_url"]}}]
         else:
             b64 = base64.b64encode(image_bytes or b"").decode()
-            content = [{"type": "text", "text": self._prompt(context)},
-                       {"type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
+            user_content = [
+                {"type": "text", "text": user_text},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
         body: dict[str, Any] = {"model": self._cfg["model"],
-                "messages": [{"role": "user", "content": content}]}
+                "messages": [{"role": "system", "content": system_text},
+                             {"role": "user", "content": user_content}]}
         if self._cfg.get("temperature") is not None:
             body["temperature"] = self._cfg["temperature"]
         body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]
@@ -93,6 +111,9 @@ class OpenAICompatAdapter:
         self.totals["requests"] += 1
         self.totals["input_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
         self.totals["output_tokens"] += int(usage.get("completion_tokens", 0) or 0)
+        details = usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}
+        self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
+            details.get("cached_tokens", 0) or 0)
         taxon, matched = match_candidate(text, context.get("candidates", []))
         return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
                  "matched": matched, "raw": text[:200]}]

@@ -43,6 +43,8 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
             "token_param": str(cfg.get("token_param", "max_tokens")),
             "price_per_1k_requests": float(cfg.get("price_per_1k_requests", 0.0)),
             "price_input_1k_tokens": float(cfg.get("price_input_1k_tokens", 0.0)),
+            "price_cached_1k_tokens": float(cfg.get("price_cached_1k_tokens",
+                                                    cfg.get("price_input_1k_tokens", 0.0))),
             "price_output_1k_tokens": float(cfg.get("price_output_1k_tokens", 0.0)),
             "timeout_s": float(cfg.get("timeout_s", 120)),
             "api_version": str(cfg.get("api_version", "") or ""),
