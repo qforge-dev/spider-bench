@@ -20,6 +20,7 @@ audit_app = typer.Typer(no_args_is_help=True)
 media_app = typer.Typer(no_args_is_help=True)
 danger_app = typer.Typer(no_args_is_help=True)
 release_app = typer.Typer(no_args_is_help=True)
+benchmark_app = typer.Typer(no_args_is_help=True)
 
 app.add_typer(taxonomy_app, name="taxonomy")
 app.add_typer(discover_app, name="discover")
@@ -27,6 +28,7 @@ app.add_typer(audit_app, name="audit")
 app.add_typer(media_app, name="media")
 app.add_typer(danger_app, name="danger")
 app.add_typer(release_app, name="release")
+app.add_typer(benchmark_app, name="benchmark")
 
 
 def _cfg(config: str):
@@ -753,6 +755,95 @@ def release_publish(
         region=cfg.aws.region, dry_run=dry_run,
     )
     typer.echo(f"published {result['complete_key']} keys={len(result['keys'])} dry_run={dry_run}")
+
+
+# ---- benchmark (M0 tasks + M1 adapter/runner/scorer) ----
+
+@benchmark_app.command("build-tasks")
+def benchmark_build_tasks(
+    version: str = typer.Option("0.4.0", "--version"),
+    dir: Optional[str] = typer.Option(None, "--dir"),
+    out: str = typer.Option("data/benchmarks/species-id-closed-v1", "--out"),
+    imaged_only: bool = typer.Option(True, "--imaged-only/--all-taxa"),
+) -> None:
+    """Build deterministic closed-set species-ID tasks from a release."""
+    import pyarrow.parquet as pq
+
+    from spider_bench.benchmark.tasks import build_tasks, write_tasks
+
+    target = Path(dir) if dir else Path(f"data/releases/polish-spiders/{version}")
+    checksums: dict[str, str] = {}
+    cpath = target / "checksums.sha256"
+    if cpath.exists():
+        for line in cpath.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                digest, name = line.split(None, 1)
+                checksums[name.strip()] = digest
+
+    def rows(name: str) -> list[dict]:
+        table = pq.read_table(target / f"{name}.parquet")
+        cols = table.column_names
+        return [{c: table.column(c)[i].as_py() for c in cols} for i in range(table.num_rows)]
+
+    tasks = build_tasks(rows("taxa"), rows("media"), imaged_only=imaged_only)
+    tp = write_tasks(tasks, out, dataset_version=version, dataset_checksums=checksums)
+    typer.echo(f"tasks={len(tasks)} wrote={tp}")
+
+
+@benchmark_app.command("run")
+def benchmark_run(
+    tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
+    model: str = typer.Option("constant-reference", "--model"),
+    out: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--out"),
+    timeout: float = typer.Option(120.0, "--timeout"),
+    resume: bool = typer.Option(True, "--resume/--no-resume"),
+    image_source: str = typer.Option("s3", "--image-source", help="s3|none (none passes empty bytes)"),
+    max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
+) -> None:
+    """Run a reference model over tasks (real model adapters plug in here)."""
+    from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
+    from spider_bench.benchmark.runner import run_tasks
+    from spider_bench.benchmark.tasks import read_tasks
+
+    adapters = {"perfect-reference": PerfectAdapter(),
+                "constant-reference": ConstantAdapter()}
+    if model not in adapters:
+        raise typer.BadParameter(f"--model must be one of {sorted(adapters)} (real adapters land in M3)")
+    rows = read_tasks(tasks)
+    if max_tasks:
+        rows = rows[:max_tasks]
+
+    def loader(t: dict) -> bytes:
+        if image_source == "none":
+            return b""
+        import httpx
+
+        cache = Path("data/work/image-cache")
+        cache.mkdir(parents=True, exist_ok=True)
+        p = cache / f"{t['image_sha256']}.bin"
+        if p.exists():
+            return p.read_bytes()
+        url = t.get("image_public_url") or ""
+        r = httpx.get(url, timeout=60)
+        r.raise_for_status()
+        p.write_bytes(r.content)
+        return r.content
+
+    summary = run_tasks(rows, adapters[model], out, loader=loader, timeout_s=timeout, resume=resume)
+    typer.echo(json.dumps(summary, indent=2))
+
+
+@benchmark_app.command("score")
+def benchmark_score(
+    tasks: str = typer.Option("data/benchmarks/species-id-closed-v1/tasks.jsonl", "--tasks"),
+    predictions: str = typer.Option("data/benchmarks/runs/run-1/predictions.jsonl", "--predictions"),
+) -> None:
+    """Score predictions against tasks (pure, offline)."""
+    from spider_bench.benchmark.runner import read_predictions
+    from spider_bench.benchmark.scorer import score
+    from spider_bench.benchmark.tasks import read_tasks
+
+    typer.echo(json.dumps(score(read_tasks(tasks), read_predictions(predictions)), indent=2))
 
 
 if __name__ == "__main__":
