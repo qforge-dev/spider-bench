@@ -29,7 +29,8 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
     key_env = cfg.get("api_key_env", "")
     if key_env and not os.environ.get(key_env):
         raise RuntimeError(f"missing required env var: {key_env} (model {cfg.get('id')})")
-    base = os.environ.get(cfg.get("base_url_env", ""), "") or "https://api.openai.com/v1"
+    base = (os.environ.get(cfg.get("base_url_env", ""), "")
+            or cfg.get("base_url", "") or "https://api.openai.com/v1")
     model = os.environ.get(cfg.get("model_env", ""), "") or cfg.get("model", "")
     return {"id": cfg.get("id"), "display_name": cfg.get("display_name", cfg.get("id")),
             "adapter": cfg.get("adapter", "openai-compatible"),

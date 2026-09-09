@@ -1,6 +1,7 @@
 id: luna
 display_name: Luna (vision)
 adapter: openai-compatible
+base_url: https://ps-mp2xfc81-eastus2.openai.azure.com/openai/v1
 base_url_env: LUNA_BASE_URL
 api_key_env: LUNA_API_KEY
 model_env: LUNA_MODEL
