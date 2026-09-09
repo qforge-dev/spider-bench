@@ -58,7 +58,7 @@ class BedrockAdapter:
                 messages=[{"role": "user", "content": [
                     {"text": user_text},
                     {"image": {"format": _image_format(image_bytes or b""),
-                               "bytes": image_bytes or b""}}]}],
+                               "source": {"bytes": image_bytes or b""}}>}]}],
                 inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail

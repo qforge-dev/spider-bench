@@ -374,7 +374,8 @@ def test_bedrock_adapter_converse_shape_and_usage():
             seen.update(kwargs)
             assert kwargs["modelId"] == "fable"
             assert kwargs["system"][0]["text"].startswith("Pick")
-            assert kwargs["messages"][0]["content"][1]["image"]["format"] == "jpeg"
+            img = kwargs["messages"][0]["content"][1]["image"]
+            assert img["format"] == "jpeg" and img["source"]["bytes"].startswith(b"\xff\xd8\xff")
             return {"output": {"message": {"content": [{"text": "Bb b"}]}},
                     "usage": {"inputTokens": 50, "outputTokens": 5}}
 
