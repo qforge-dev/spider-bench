@@ -302,8 +302,11 @@ def _fetch(
         return content, ctype, hops
     import httpx
 
+    from spider_bench.sources.http import DEFAULT_USER_AGENT
+
     hops: list[str] = []
-    with httpx.stream("GET", url, follow_redirects=True, timeout=30) as resp:
+    with httpx.stream("GET", url, follow_redirects=True, timeout=30,
+                      headers={"User-Agent": DEFAULT_USER_AGENT}) as resp:
         for h in getattr(resp, "history", []) or []:
             loc = h.headers.get("location")
             if loc:

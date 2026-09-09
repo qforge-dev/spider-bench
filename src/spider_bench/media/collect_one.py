@@ -160,7 +160,9 @@ def gap_fill_commons(taxa: list[str], profile: str = "research",
                                             "license": lic, "reason": rec.get("review_reason") or "sharealike_or_ambiguous"})
                         continue
                     if lic in accept and m.get("media_url"):
-                        picked = {"taxon": name, "url": m["media_url"], "license": lic,
+                        raw_url = m["media_url"]
+                        clean_url = raw_url.split("?")[0]  # drop ?utm_source tracking junk
+                        picked = {"taxon": name, "url": clean_url, "license": lic,
                                   "creator": m.get("creator"), "observation_id": None,
                                   "photo_id": m.get("title"), "attribution": m.get("attribution"),
                                   "research_grade": False, "source": "commons",
