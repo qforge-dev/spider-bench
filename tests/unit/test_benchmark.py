@@ -398,3 +398,27 @@ def test_bedrock_adapter_converse_shape_and_usage():
                       {"candidates": ["Aa a", "Bb b"], "prompt": "Pick one."})
     assert preds[0] == {"taxon": "Bb b", "score": 1.0, "matched": True, "raw": "Bb b"}
     assert a.totals["input_tokens"] == 50 and a.estimated_cost() == 0.0
+
+
+def test_bedrock_tool_use_beats_prose():
+    from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+    seen = {}
+
+    class FakeBedrock:
+        def converse(self, **kwargs):
+            seen.update(kwargs)
+            tools = kwargs["toolConfig"]["tools"]
+            assert tools[0]["toolSpec"]["inputSchema"]["json"]["required"] == ["species"]
+            assert kwargs["toolConfig"]["toolChoice"] == {"any": {}}
+            return {"output": {"message": {"content": [
+                {"text": "Long rambling reasoning about spiders..."},
+                {"toolUse": {"input": {"species": "Bb b"}}}]}},
+                    "usage": {"inputTokens": 10, "outputTokens": 3}}
+
+    a = BedrockAdapter({"id": "fable", "model": "fable", "region": "us-east-1",
+                        "max_output_tokens": 100,
+                        "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                        "price_output_1k_tokens": 0.0}, client=FakeBedrock())
+    preds = a.predict(b"\xff\xd8\xff", {"candidates": ["Aa a", "Bb b"], "prompt": "Pick."})
+    assert preds[0] == {"taxon": "Bb b", "score": 1.0, "matched": True, "raw": "Bb b"}
