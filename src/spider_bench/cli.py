@@ -1115,5 +1115,20 @@ def benchmark_leaderboard(
     typer.echo(f"runs={len(rows)} wrote={out} + {html_path}")
 
 
+@benchmark_app.command("report")
+def benchmark_report(
+    run_id: str = typer.Option(..., "--run-id"),
+    tasks: Optional[str] = typer.Option(None, "--tasks"),
+    suite: str = typer.Option("species-id-v2", "--suite"),
+    runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
+) -> None:
+    """Per-sample report page for a run: image previews, correct vs predicted."""
+    from spider_bench.benchmark.report import write_run_report
+    from spider_bench.benchmark.tasks import read_tasks
+
+    out = write_run_report(Path(runs_dir) / run_id, read_tasks(_suite_tasks(suite, tasks)))
+    typer.echo(f"wrote {out}")
+
+
 if __name__ == "__main__":
     app()

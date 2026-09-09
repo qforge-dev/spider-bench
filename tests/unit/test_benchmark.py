@@ -274,7 +274,6 @@ def test_parallel_content_deterministic_and_retry(tmp_path):
 
 
 def test_leaderboard_page_has_chart_and_table(tmp_path):
-    import json
 
     from spider_bench.benchmark.leaderboard import render_page
 
@@ -284,3 +283,22 @@ def test_leaderboard_page_has_chart_and_table(tmp_path):
              "scores": {"scored": 5, "top1": 0.4, "top5": 0.8, "errors": 0}}]
     html = render_page(runs)
     assert "<svg" in html and "0.400" in html and "r1" in html
+
+
+def test_run_report_page(tmp_path):
+    import json
+
+    from spider_bench.benchmark.report import write_run_report
+
+    tasks = _mini()
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+              "image_sha256": t["image_sha256"],
+              "predictions": [{"taxon": t["correct_taxon"], "score": 1.0, "matched": True}],
+              "error": None} for t in tasks]
+    d = tmp_path / "r"
+    d.mkdir()
+    (d / "predictions.jsonl").write_text("\n".join(json.dumps(p) for p in preds))
+    (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r"}))
+    out = write_run_report(d, tasks)
+    html = out.read_text()
+    assert "<img" in html and "Aa a" in html
