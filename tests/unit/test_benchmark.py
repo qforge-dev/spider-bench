@@ -523,7 +523,7 @@ def test_effort_and_seed_wiring(monkeypatch):
             "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
             "price_output_1k_tokens": 0.0}
     OpenAICompatAdapter(base, post=fake_post).predict(b"", {"candidates": ["Aa a"]})
-    assert seen["reasoning"] == {"effort": "high", "summary": "auto"} and seen["seed"] == 42
+    assert seen["reasoning_effort"] == "high" and seen["seed"] == 42 and "reasoning" not in seen
     # reasoning_api none -> omitted
     seen.clear()
     OpenAICompatAdapter({**base, "reasoning_api": "none"},
