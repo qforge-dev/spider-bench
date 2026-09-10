@@ -503,3 +503,43 @@ def test_run_rows_carry_provenance(tmp_path):
     rows = read_predictions(out)
     assert all(set(r) >= {"latency_s", "attempts", "usage", "task_id"} for r in rows)
     assert all(r["attempts"] == 1 and r["latency_s"] >= 0 for r in rows)
+
+
+def test_effort_and_seed_wiring(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+    from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen.update(body)
+        return {"choices": [{"message": {"content": "Aa a"}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    base = {"id": "o", "base_url": "https://x/v1", "model": "m", "key_env": "T_KEY",
+            "temperature": None, "token_param": "max_tokens", "max_output_tokens": 10,
+            "reasoning_effort": "high", "reasoning_api": "openai", "seed": 42,
+            "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+            "price_output_1k_tokens": 0.0}
+    OpenAICompatAdapter(base, post=fake_post).predict(b"", {"candidates": ["Aa a"]})
+    assert seen["reasoning"] == {"effort": "high"} and seen["seed"] == 42
+    # reasoning_api none -> omitted
+    seen.clear()
+    OpenAICompatAdapter({**base, "reasoning_api": "none"},
+                        post=fake_post).predict(b"", {"candidates": ["Aa a"]})
+    assert "reasoning" not in seen and seen["seed"] == 42
+
+    exchange = {}
+
+    class FakeBedrock:
+        def converse(self, **kwargs):
+            exchange.update(kwargs)
+            return {"output": {"message": {"content": [{"text": "Aa a"}]}}, "usage": {}}
+
+    BedrockAdapter({"id": "f", "model": "f", "region": "r", "max_output_tokens": 10,
+                    "reasoning_effort": "medium",
+                    "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                    "price_output_1k_tokens": 0.0},
+                   client=FakeBedrock()).predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})
+    extra = exchange["additionalModelRequestFields"]
+    assert extra["thinking"] == {"type": "adaptive"} and extra["output_config"] == {"effort": "medium"}

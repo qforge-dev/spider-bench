@@ -1037,6 +1037,8 @@ def benchmark_run(
     run_id: Optional[str] = typer.Option(None, "--run-id"),
     suite: str = typer.Option("species-id-v4", "--suite"),
     concurrency: int = typer.Option(4, "--concurrency", help="parallel model requests"),
+    effort: Optional[str] = typer.Option(None, "--effort", help="low|medium|high (overrides registry)"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="sampling seed (overrides registry)"),
     rate_limit: float = typer.Option(0.0, "--rate-limit", help="max requests/sec total (0 = unlimited)"),
     retries: int = typer.Option(3, "--retries", help="retries on timeouts/429/5xx with backoff"),
 ) -> None:
@@ -1071,6 +1073,12 @@ def benchmark_run(
             "per_1k_requests": resolved["price_per_1k_requests"],
             "input_1k_tokens": resolved["price_input_1k_tokens"],
             "output_1k_tokens": resolved["price_output_1k_tokens"]}
+        if effort is not None:
+            if effort not in ("low", "medium", "high"):
+                raise typer.BadParameter("--effort must be low, medium or high")
+            resolved["reasoning_effort"] = effort
+        if seed is not None:
+            resolved["seed"] = seed
     rows = read_tasks(tasks_path := _suite_tasks(suite, tasks))
     if max_tasks:
         rows = rows[:max_tasks]
@@ -1149,7 +1157,8 @@ def benchmark_run(
                            "image_source": image_source},
                 "adapter": {k: locals().get("resolved", {}).get(k)
                             for k in ("adapter", "model", "base_url", "temperature",
-                                      "token_param", "structured_output", "reasoning_effort", "max_output_tokens")}
+                                      "token_param", "structured_output", "reasoning_effort",
+                                      "reasoning_api", "seed", "max_output_tokens")}
                 if "resolved" in locals() else {"adapter": "reference"}}
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     (Path(out_path).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

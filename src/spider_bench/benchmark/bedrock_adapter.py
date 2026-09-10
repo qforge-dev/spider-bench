@@ -91,6 +91,10 @@ class BedrockAdapter:
                     ],
                 }],
                 inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
+                **({"additionalModelRequestFields": {
+                    "thinking": {"type": "adaptive"},
+                    "output_config": {"effort": self._cfg["reasoning_effort"]},
+                }} if self._cfg.get("reasoning_effort") else {}),
                 **extra,
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail

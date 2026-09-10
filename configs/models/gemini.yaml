@@ -12,6 +12,7 @@ model: gemini-2.5-flash
 # Ask the model for exactly one candidate-list name.
 max_output_tokens: 2000
 token_param: max_tokens
+reasoning_api: none  # unverified on this endpoint; effort flags ignored
 # temperature omitted (provider default)
 # Pricing in USD per 1k tokens (no per-request fee).
 # Indicative Gemini 2.5 Flash rates, retrieved 2026-09-10 — VERIFY against
