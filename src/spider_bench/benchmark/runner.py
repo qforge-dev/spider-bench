@@ -102,12 +102,16 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
         nonlocal retried
         attempt = 0
         last: BaseException | None = None
+        t0 = time.time()
         for attempt in range(retries + 1):
             try:
                 preds = call_limited(task)
+                usage = dict(getattr(adapter, "last_usage", None) or {})
                 return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                         "tasks_hash": thash, "image_sha256": task["image_sha256"],
-                        "predictions": preds, "error": None}
+                        "predictions": preds, "error": None,
+                        "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
+                        "usage": usage}
             except Exception as e:  # noqa: BLE001 - per-row isolation
                 last = e
                 if _is_transient(e) and attempt < retries:
@@ -116,10 +120,14 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
                     continue
                 return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                         "tasks_hash": thash, "image_sha256": task["image_sha256"],
-                        "predictions": [], "error": f"{type(e).__name__}: {e}"}
+                        "predictions": [], "error": f"{type(e).__name__}: {e}",
+                        "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
+                        "usage": dict(getattr(adapter, "last_usage", None) or {})}
         return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                 "tasks_hash": thash, "image_sha256": task["image_sha256"],
-                "predictions": [], "error": f"{type(last).__name__}: {last}"}
+                "predictions": [], "error": f"{type(last).__name__}: {last}",
+                "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
+                "usage": {}}
 
     with out.open("a", encoding="utf-8") as fh:
         if cost_reached():

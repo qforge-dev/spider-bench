@@ -492,3 +492,14 @@ def test_protocol_split_no_duplication():
     assert "Aa a" not in system and "SPIDER_LIST" in system and "SPIDER_NAME" in system
     assert "<SPIDER_LIST>" in user and "- Aa a" in user and "- Bb b" in user
     assert "SPIDER_NAME" not in user
+
+
+def test_run_rows_carry_provenance(tmp_path):
+    from spider_bench.benchmark.runner import read_predictions, run_tasks
+
+    tasks = _mini()
+    out = tmp_path / "p.jsonl"
+    run_tasks(tasks, PerfectAdapter(), out, loader=lambda t: b"x")
+    rows = read_predictions(out)
+    assert all(set(r) >= {"latency_s", "attempts", "usage", "task_id"} for r in rows)
+    assert all(r["attempts"] == 1 and r["latency_s"] >= 0 for r in rows)

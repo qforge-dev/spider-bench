@@ -1071,7 +1071,7 @@ def benchmark_run(
             "per_1k_requests": resolved["price_per_1k_requests"],
             "input_1k_tokens": resolved["price_input_1k_tokens"],
             "output_1k_tokens": resolved["price_output_1k_tokens"]}
-    rows = read_tasks(_suite_tasks(suite, tasks))
+    rows = read_tasks(tasks_path := _suite_tasks(suite, tasks))
     if max_tasks:
         rows = rows[:max_tasks]
 
@@ -1092,6 +1092,15 @@ def benchmark_run(
         return r.content
 
     adapter = adapters[model]
+    run_dir = Path(out_path).parent
+    run_dir.mkdir(parents=True, exist_ok=True)
+    import shutil as _shutil
+
+    (run_dir / "tasks.jsonl").write_text(
+        "\n".join(json.dumps(t, sort_keys=True) for t in rows) + "\n", encoding="utf-8")
+    suite_manifest = tasks_path.parent / "manifest.json"
+    if suite_manifest.exists():
+        _shutil.copy(suite_manifest, run_dir / "suite-manifest.json")
     total = len(rows)
     step = max(1, total // 50)  # ~50 progress lines per run
     import time as _time
@@ -1116,12 +1125,32 @@ def benchmark_run(
     summary = run_tasks(rows, adapter, out_path, loader=loader, timeout_s=timeout,
                         resume=resume, max_cost=max_cost, progress=_progress,
                         max_workers=concurrency, rate_limit=rate_limit, retries=retries)
+    def _git_sha() -> str:
+        try:
+            import subprocess as _sp
+
+            return _sp.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        except Exception:
+            return "unknown"
+
     manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
                 "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
                 "usage": summary.get("usage", {}),
                 "estimated_cost_usd": summary.get("estimated_cost_usd"),
-                "errors": summary["errors"],
-                "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+                "errors": summary["errors"], "retried": summary.get("retried", 0),
+                "started_at": _dt.datetime.fromtimestamp(
+                    _dt.datetime.now(_dt.timezone.utc).timestamp() - summary.get("seconds", 0),
+                    tz=_dt.timezone.utc).isoformat(),
+                "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                "git_sha": _git_sha(),
+                "params": {"timeout_s": timeout, "concurrency": concurrency,
+                           "rate_limit": rate_limit, "retries": retries,
+                           "max_tasks": max_tasks, "max_cost": max_cost,
+                           "image_source": image_source},
+                "adapter": {k: locals().get("resolved", {}).get(k)
+                            for k in ("adapter", "model", "base_url", "temperature",
+                                      "token_param", "structured_output", "max_output_tokens")}
+                if "resolved" in locals() else {"adapter": "reference"}}
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     (Path(out_path).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     typer.echo(json.dumps(summary, indent=2))

@@ -110,6 +110,10 @@ class BedrockAdapter:
         self.totals["output_tokens"] += int(usage.get("outputTokens", 0) or 0)
         self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
             usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)
+        self.last_usage = {"input_tokens": int(usage.get("inputTokens", 0) or 0),
+                           "output_tokens": int(usage.get("outputTokens", 0) or 0),
+                           "cached_input_tokens": int(
+                               usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)}
         taxon, matched = match_candidate(text, cands)
         return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                 "matched": matched, "raw": text[:200]}]
+                 "matched": matched, "raw": text}]

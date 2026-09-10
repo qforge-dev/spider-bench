@@ -167,6 +167,10 @@ class OpenAICompatAdapter:
         details = usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}
         self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
             details.get("cached_tokens", 0) or 0)
+        self.last_usage = {"input_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                           "output_tokens": int(usage.get("completion_tokens", 0) or 0),
+                           "cached_input_tokens": int(
+                               ((usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)) or 0)}
         taxon, matched = match_candidate(text, context.get("candidates", []))
         return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                 "matched": matched, "raw": text[:200]}]
+                 "matched": matched, "raw": text}]
