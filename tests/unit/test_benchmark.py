@@ -483,3 +483,12 @@ def test_hard_shortlist_prefers_congeners():
     assert row["meta"]["n_congener"] == 1 and row["meta"]["n_family"] == 1
     assert row["meta"]["shortlist_mode"] == "hard"
     assert hard_shortlist(tasks, taxinfo, n=3, seed=1, suite="h") == out
+
+
+def test_protocol_split_no_duplication():
+    from spider_bench.benchmark.tasks import _prompts
+
+    system, user = _prompts(["Aa a", "Bb b"])
+    assert "Aa a" not in system and "SPIDER_LIST" in system and "SPIDER_NAME" in system
+    assert "<SPIDER_LIST>" in user and "- Aa a" in user and "- Bb b" in user
+    assert "SPIDER_NAME" not in user
