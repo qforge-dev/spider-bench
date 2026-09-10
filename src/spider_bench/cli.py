@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -199,6 +200,63 @@ def taxonomy_reconcile(
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     Path(out).write_text(json.dumps(report, indent=2), encoding="utf-8")
     typer.echo(f"wrote {out}")
+    conn.close()
+
+
+@taxonomy_app.command("common-names")
+def taxonomy_common_names(
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    rate_limit: float = typer.Option(2.0, "--rate-limit"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Fetch English common names (iNat preferred_common_name) into taxa.common_name.
+
+    Many obscure species have none — NULL means unknown, never invented.
+    """
+    import httpx as _httpx
+
+    from spider_bench.db import ensure_migrated as _migrated
+    from spider_bench.db import get_connection as _connect
+
+    cfg = _cfg(config)
+    conn = _connect(cfg.local_.sqlite_path)
+    _migrated(conn)
+    names = [r[0] for r in conn.execute(
+        "SELECT scientific_name FROM taxa WHERE snapshot_id='araneae-09.2026' "
+        "AND common_name IS NULL ORDER BY 1").fetchall()]
+    if max_species:
+        names = names[:max_species]
+    typer.echo(f"missing common names: {len(names)} dry_run={dry_run}")
+    if dry_run:
+        conn.close()
+        return
+    got = 0
+    with _httpx.Client(headers={"User-Agent": "spider-bench/0.2"}) as client:
+        for i, name in enumerate(names, 1):
+            try:
+                r = client.get("https://api.inaturalist.org/v1/taxa/autocomplete",
+                               params={"q": name, "rank": "species"}, timeout=20)
+                r.raise_for_status()
+                best = next((t for t in r.json().get("results", [])
+                             if t.get("name", "").lower() == name.lower()),
+                            (r.json().get("results", []) or [{}])[0])
+                common = best.get("preferred_common_name")
+                if common:
+                    conn.execute("UPDATE taxa SET common_name=? WHERE scientific_name=? "
+                                 "AND snapshot_id='araneae-09.2026'", (common, name))
+                    got += 1
+            except Exception as e:  # noqa: BLE001 - per-row isolation
+                typer.echo(f"warn {name}: {e}", err=True)
+            if i % 50 == 0:
+                conn.commit()
+                typer.echo(f"[{i}/{len(names)}] found={got}", err=True)
+            time.sleep(1.0 / max(rate_limit, 0.1))
+    conn.commit()
+    total = conn.execute("SELECT COUNT(*) FROM taxa WHERE snapshot_id='araneae-09.2026'").fetchone()[0]
+    have = conn.execute("SELECT COUNT(*) FROM taxa WHERE snapshot_id='araneae-09.2026' "
+                        "AND common_name IS NOT NULL").fetchone()[0]
+    typer.echo(f"common names: {have}/{total}")
     conn.close()
 
 
@@ -1077,13 +1135,22 @@ def benchmark_build_shortlist(
     seed: int = typer.Option(42, "--seed"),
     suite: str = typer.Option("species-id-v3", "--suite"),
     hard: bool = typer.Option(False, "--hard", help="hostile: congeners, then family, then random"),
+    naming: str = typer.Option("latin", "--naming", help="latin or english labels"),
 ) -> None:
-    """Seeded shortlists: same seed + tasks -> identical rows for every model."""
+    """Seeded shortlists: same seed + tasks -> identical rows for every model.
+
+    naming=english renders candidates as 'Common (Latin)' where a common
+    name exists (else Latin); correct_taxon uses the rendered label and
+    meta.latin keeps the scientific name. Same seeds -> same composition
+    as the latin suite, directly comparable.
+    """
     from spider_bench.benchmark.tasks import hard_shortlist, read_tasks, shorten_tasks, write_tasks
 
     src = Path("data/benchmarks") / from_suite / part / "tasks.jsonl"
     tasks = read_tasks(src)
     out = Path("data/benchmarks") / suite
+    if naming not in ("latin", "english"):
+        raise typer.BadParameter("--naming must be latin or english")
     if hard:
         from spider_bench.db import ensure_migrated as _migrated
         from spider_bench.db import get_connection as _connect
@@ -1097,6 +1164,36 @@ def benchmark_build_shortlist(
         short = hard_shortlist(tasks, taxinfo, n, seed, suite=suite)
     else:
         short = shorten_tasks(tasks, n, seed, suite=suite)
+    if naming == "english":
+        from spider_bench.db import ensure_migrated as _migrated2
+        from spider_bench.db import get_connection as _connect2
+
+        conn = _connect2("data/work/spider-bench.sqlite")
+        _migrated2(conn)
+        common = {r[0]: r[1] for r in conn.execute(
+            "SELECT scientific_name, common_name FROM taxa WHERE snapshot_id='araneae-09.2026'").fetchall()}
+        conn.close()
+
+        def label(latin: str) -> str:
+            c = common.get(latin)
+            return f"{c} ({latin})" if c else latin
+
+        relabeled = []
+        for t in short:
+            latin_correct = t["correct_taxon"]
+            row = dict(t)
+            row["candidates"] = [label(c) for c in t["candidates"]]
+            row["correct_taxon"] = label(latin_correct)
+            row["meta"] = {**(t.get("meta") or {}), "latin": latin_correct, "naming": "english",
+                           "suite": suite}
+            row["task_id"] = f"{suite}:{latin_correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
+            from spider_bench.benchmark.tasks import _prompts
+
+            row["system_prompt"], row["user_prompt"] = _prompts(row["candidates"])
+            relabeled.append(row)
+        short = sorted(relabeled, key=lambda r: r["task_id"])
+        with_english = sum(1 for t in short if t["correct_taxon"] != t["meta"]["latin"])
+        typer.echo(f"english-labeled answers: {with_english}/{len(short)}")
     out = Path("data/benchmarks") / suite
     write_tasks(short, out / "query", dataset_version=f"{from_suite}/{part}",
                 dataset_checksums={"shortlist": f"n={n} seed={seed}"})
