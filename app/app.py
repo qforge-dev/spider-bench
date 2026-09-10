@@ -14,7 +14,7 @@ from urllib.request import urlopen
 from flask import Flask, abort, render_template, request
 
 BUCKET = "spiders-dataset-088543363904"
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 LOCAL_DIR = Path("data/releases/polish-spiders") / VERSION
 
 app = Flask(__name__)
