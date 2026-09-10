@@ -1076,13 +1076,27 @@ def benchmark_build_shortlist(
     n: int = typer.Option(20, "--n", help="shortlist size incl. correct answer"),
     seed: int = typer.Option(42, "--seed"),
     suite: str = typer.Option("species-id-v3", "--suite"),
+    hard: bool = typer.Option(False, "--hard", help="hostile: congeners, then family, then random"),
 ) -> None:
-    """Seeded 20-name shortlists: same seed + tasks -> identical rows for every model."""
-    from spider_bench.benchmark.tasks import read_tasks, shorten_tasks, write_tasks
+    """Seeded shortlists: same seed + tasks -> identical rows for every model."""
+    from spider_bench.benchmark.tasks import hard_shortlist, read_tasks, shorten_tasks, write_tasks
 
     src = Path("data/benchmarks") / from_suite / part / "tasks.jsonl"
     tasks = read_tasks(src)
-    short = shorten_tasks(tasks, n, seed, suite=suite)
+    out = Path("data/benchmarks") / suite
+    if hard:
+        from spider_bench.db import ensure_migrated as _migrated
+        from spider_bench.db import get_connection as _connect
+
+        conn = _connect("data/work/spider-bench.sqlite")
+        _migrated(conn)
+        taxinfo = {r[0]: (r[0].split()[0], r[1] or "")
+                   for r in conn.execute(
+                       "SELECT scientific_name, family FROM taxa WHERE snapshot_id='araneae-09.2026'").fetchall()}
+        conn.close()
+        short = hard_shortlist(tasks, taxinfo, n, seed, suite=suite)
+    else:
+        short = shorten_tasks(tasks, n, seed, suite=suite)
     out = Path("data/benchmarks") / suite
     write_tasks(short, out / "query", dataset_version=f"{from_suite}/{part}",
                 dataset_checksums={"shortlist": f"n={n} seed={seed}"})

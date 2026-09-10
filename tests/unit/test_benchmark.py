@@ -466,3 +466,20 @@ def test_shortlist_deterministic_and_contains_answer():
         assert t["task_id"].startswith("s3:")
     assert a != c or True  # seed recorded regardless
     assert all(t["meta"]["shortlist_seed"] == 7 for t in a)
+
+
+def test_hard_shortlist_prefers_congeners():
+    from spider_bench.benchmark.tasks import hard_shortlist
+
+    taxa = ["Aa a", "Aa b", "Bb a", "Bb b", "Cc c"]
+    tasks = [{"task_id": f"t:{t}", "correct_taxon": t, "image_sha256": "0" * 64,
+              "candidates": taxa, "meta": {"family": "F"}} for t in taxa]
+    taxinfo = {n: (n.split()[0], "F") for n in taxa}
+    out = hard_shortlist(tasks, taxinfo, n=3, seed=1, suite="h")
+    row = next(r for r in out if r["correct_taxon"] == "Bb a")
+    assert set(row["candidates"]) == {"Bb a", "Bb b", "Aa a"} or \
+        set(row["candidates"]) == {"Bb a", "Bb b", "Aa b"} or \
+        set(row["candidates"]) == {"Bb a", "Bb b", "Cc c"}
+    assert row["meta"]["n_congener"] == 1 and row["meta"]["n_family"] == 1
+    assert row["meta"]["shortlist_mode"] == "hard"
+    assert hard_shortlist(tasks, taxinfo, n=3, seed=1, suite="h") == out

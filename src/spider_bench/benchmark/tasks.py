@@ -24,6 +24,50 @@ def tasks_hash(tasks: list[dict[str, Any]]) -> str:
     return h.hexdigest()
 
 
+def hard_shortlist(tasks: list[dict[str, Any]], taxinfo: dict[str, tuple[str, str]],
+                   n: int = 20, seed: int = 42,
+                   suite: str | None = None) -> list[dict[str, Any]]:
+    """Hostile shortlists: congeners, then same-family, then random fill. Seeded.
+
+    taxinfo maps taxon name -> (genus, family). Same determinism contract as
+    shorten_tasks: same seed + tasks -> identical rows for every model.
+    """
+    out = []
+    for t in sorted(tasks, key=lambda r: r["task_id"]):
+        correct = t["correct_taxon"]
+        genus = correct.split()[0] if correct.split() else ""
+        family = (t.get("meta") or {}).get("family", "") or taxinfo.get(correct, ("", ""))[1]
+        pool = sorted({c for c in t.get("candidates", []) if c != correct})
+        rng = random.Random(f"{seed}:{t['task_id']}")
+        congeners = sorted(c for c in pool if c.split()[:1] == [genus] and taxinfo.get(c, ("", ""))[0] == genus)
+        samefam = sorted(c for c in pool if c not in congeners
+                         and (taxinfo.get(c, ("", ""))[1] == family and family))
+        rest = sorted(c for c in pool if c not in congeners and c not in samefam)
+        rng.shuffle(congeners)
+        rng.shuffle(samefam)
+        rng.shuffle(rest)
+        picked = (congeners + samefam + rest)[:n - 1]
+        short = sorted([correct] + picked)
+        row = dict(t)
+        row["candidates"] = short
+        row["system_prompt"] = t.get("prompt", "Identify the spider species in this photograph.")
+        row["user_prompt"] = ("Name this spider. Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> "
+                              f"containing exactly one of these {len(short)} names, "
+                              "and nothing outside the tags: " + "; ".join(short))
+        row["meta"] = {**(t.get("meta") or {}), "shortlist_n": len(short), "shortlist_seed": seed,
+                       "shortlist_mode": "hard",
+                       "n_congener": sum(1 for c in picked if c in congeners),
+                       "n_family": sum(1 for c in picked if c in samefam),
+                       "suite": suite or t.get("meta", {}).get("suite", "")}
+        row["task_id"] = f"{row['meta']['suite']}:{correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
+        out.append(row)
+    return sorted(out, key=lambda r: r["task_id"])
+    h = hashlib.sha256()
+    for t in sorted(tasks, key=lambda r: r["task_id"]):
+        h.update(json.dumps(t, sort_keys=True).encode())
+    return h.hexdigest()
+
+
 def shorten_tasks(tasks: list[dict[str, Any]], n: int, seed: int = 42,
                   suite: str | None = None) -> list[dict[str, Any]]:
     """Seeded per-task shortlists: correct + (n-1) distractors, deterministic.
