@@ -9,7 +9,7 @@ api_key_env: OPENROUTER_API_KEY
 model_env: GROK_MODEL
 model: x-ai/grok-4.6
 # Ask the model for exactly one candidate-list name.
-max_output_tokens: 5000
+max_output_tokens: 16000
 token_param: max_tokens
 structured_output: false
 reasoning_effort: medium

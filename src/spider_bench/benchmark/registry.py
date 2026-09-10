@@ -40,7 +40,7 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
             "base_url": base.rstrip("/"), "model": model,
             "has_key": bool(key_env and os.environ.get(key_env)),
             "key_env": key_env,
-            "max_output_tokens": int(cfg.get("max_output_tokens", 5000)),
+            "max_output_tokens": int(cfg.get("max_output_tokens", 16000)),
             "temperature": (None if cfg.get("temperature") is None
                             else float(cfg.get("temperature"))),
             "token_param": str(cfg.get("token_param", "max_tokens")),

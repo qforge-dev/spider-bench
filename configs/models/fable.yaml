@@ -11,7 +11,7 @@ model: global.anthropic.claude-fable-5-1
 # Ask the model for exactly one candidate-list name.
 structured_output: false  # model rejects outputConfig (ValidationException)
 reasoning_effort: medium
-max_output_tokens: 5000
+max_output_tokens: 16000
 # temperature omitted: reasoning-class models only accept the default
 # Pricing in USD per 1k tokens (Bedrock has no per-request fee).
 # User-supplied Claude Fable 5.1 sheet: base input $10/MTok, output $50/MTok,

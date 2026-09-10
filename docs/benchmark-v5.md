@@ -72,10 +72,17 @@ Include no-image controls; do not attribute all accuracy above 5% to vision.
 
 ## Model calls and scoring
 
-All seven registered model configurations now use **5,000 completion tokens**.
+All seven registered model configurations now use **16,000 completion tokens**
+as the next pilot ceiling. The initial Luna HIGH pilot hit the previous 5,000-token
+limit on 15 of its first 124 saved responses, with all 5,000 tokens used for reasoning
+and no visible answer. The completed 2,000-row MEDIUM run had no truncations.
+The new ceiling still requires a provider pilot; it is not evidence that truncation
+has been eliminated. Final comparisons should use the same declared ceiling and
+fresh run IDs. Preserve the 5,000-token runs as a separate experimental condition.
+
 For Chat Completions this includes hidden reasoning and visible output; see the
 [official parameter documentation](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
-A higher reasoning setting can still exhaust 5,000 tokens. Stop reasons, raw answer
+A higher reasoning setting can still exhaust the ceiling. Stop reasons, raw answer
 text, provider usage, reasoning-token counts where supplied, response identifiers,
 and returned model identifiers are retained. Never treat a limit-hit response as
 a normal completed identification. Increase the limit only as a new, predeclared
@@ -142,8 +149,8 @@ From the repository root, with the normal provider credentials loaded in the she
 spider-bench benchmark validate --suite species-id-v5
 
 # First do a small provider smoke run. Budgets below are safety ceilings, not quotes.
-spider-bench benchmark run --suite species-id-v5 --model luna --effort high --seed 42 --max-tasks 50 --max-cost 2 --run-id luna-v5-high-pilot
-spider-bench benchmark score --run-id luna-v5-high-pilot
+spider-bench benchmark run --suite species-id-v5 --model luna --effort high --seed 42 --max-tasks 100 --max-cost 3 --run-id luna-v5-high-16k-pilot
+spider-bench benchmark score --run-id luna-v5-high-16k-pilot
 
 # Inspect status_counts and execution_valid before starting full runs.
 spider-bench benchmark run --suite species-id-v5 --model luna --effort medium --seed 42 --max-cost 10 --run-id luna-v5-medium
@@ -163,6 +170,9 @@ spider-bench benchmark leaderboard --suite species-id-v5 --condition image
 Repeat the declared configurations for additional models and effort settings. A
 provider's word “high” does not imply equal computation to another provider's
 “high.” Prices are configuration-based estimates, not verified invoices.
+The token setting is a per-response ceiling, not a fixed charge. The separate
+`--max-cost` guard can stop a run before all tasks finish if HIGH consumes more
+tokens. Choose the full-run budget from the pilot's observed usage.
 
 To prepare another version, use a new output name. Existing suites are never
 silently overwritten. Source snapshots and downloaded originals are cached for

@@ -21,9 +21,9 @@ def tasks(n=4):
              "meta": {"family": "F"}} for i in range(n)]
 
 
-def config():
+def config(max_output_tokens=16000):
     return {"id": "test", "model": "test", "base_url": "https://example.invalid",
-            "max_output_tokens": 5000, "token_param": "max_completion_tokens",
+            "max_output_tokens": max_output_tokens, "token_param": "max_completion_tokens",
             "structured_output": False, "price_per_1k_requests": 0,
             "price_input_1k_tokens": 0, "price_output_1k_tokens": 0}
 
@@ -92,19 +92,20 @@ def test_source_label_and_photo_must_match_not_just_search_query():
     assert verify_observation(task, media, obs, {"CC-BY-4.0"})[1] == "not_research_grade"
 
 
-def test_blank_at_token_limit_is_recorded_and_not_a_success(tmp_path):
+@pytest.mark.parametrize("limit", [5000, 16000])
+def test_blank_at_token_limit_is_recorded_and_not_a_success(tmp_path, limit):
     def post(url, body, headers):
-        assert body["max_completion_tokens"] == 5000
+        assert body["max_completion_tokens"] == limit
         return {"id": "response1", "model": "returned-model", "choices": [{
             "message": {"content": ""}, "finish_reason": "length"}],
-            "usage": {"prompt_tokens": 100, "completion_tokens": 5000,
-                      "completion_tokens_details": {"reasoning_tokens": 5000}}}
+            "usage": {"prompt_tokens": 100, "completion_tokens": limit,
+                      "completion_tokens_details": {"reasoning_tokens": limit}}}
     rows = tasks(1)
     path = tmp_path / "predictions.jsonl"
-    run_tasks(rows, OpenAICompatAdapter(config(), post=post), path, loader=lambda t: b"image")
+    run_tasks(rows, OpenAICompatAdapter(config(limit), post=post), path, loader=lambda t: b"image")
     preds = read_predictions(path)
     assert preds[0]["status"] == "truncated" and preds[0]["finish_reason"] == "length"
-    assert preds[0]["provider"]["reasoning_tokens"] == 5000
+    assert preds[0]["provider"]["reasoning_tokens"] == limit
     result = score(rows, preds)
     assert result["status_counts"] == {"truncated": 1}
     assert result["errors"] == 1 and not result["execution_valid"] and result["top1"] == 0
@@ -127,7 +128,7 @@ def test_exact_prepared_bytes_and_no_image_control():
 def test_bedrock_concatenates_text_blocks_and_retains_stop_reason():
     class Client:
         def converse(self, **kwargs):
-            assert kwargs["inferenceConfig"]["maxTokens"] == 5000
+            assert kwargs["inferenceConfig"]["maxTokens"] == 16000
             assert len(kwargs["messages"][0]["content"]) == 1  # no-image control
             return {"stopReason": "end_turn", "output": {"message": {"content": [
                 {"reasoningContent": {"reasoningText": {"text": "trace"}}},

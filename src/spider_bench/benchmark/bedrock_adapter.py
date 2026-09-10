@@ -92,7 +92,7 @@ class BedrockAdapter:
                             "source": {"bytes": image_bytes or b""},
                         }}] if image_bytes else []),
                 }],
-                inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 5000)},
+                inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 16000)},
                 **({"additionalModelRequestFields": {
                     "thinking": {"type": "adaptive"},
                     "output_config": {"effort": self._cfg["reasoning_effort"]},

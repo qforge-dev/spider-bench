@@ -64,5 +64,5 @@ python -m app.app                  # local search UI → http://127.0.0.1:5000
 
 Use [benchmark v5](docs/benchmark-v5.md) for fresh model comparisons. It specifies
 source validation, normalized images, deterministic shuffled 20-name shortlists,
-5,000-token limits, explicit failure accounting and the rerun commands.
+16,000-token limits, explicit failure accounting and the rerun commands.
 Earlier runs remain historical exploratory results.
