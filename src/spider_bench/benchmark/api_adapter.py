@@ -147,6 +147,17 @@ class OpenAICompatAdapter:
         call_usage = {"input_tokens": int(usage.get("prompt_tokens", 0) or 0),
                       "output_tokens": int(usage.get("completion_tokens", 0) or 0),
                       "cached_input_tokens": int(details.get("cached_tokens", 0) or 0)}
+        reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        # Google's compatibility API can omit thinking from completion_tokens.
+        # With no tools in these requests, total - prompt includes all billed output.
+        if (self._cfg["base_url"].startswith("https://generativelanguage.googleapis.com/")
+                and usage.get("total_tokens") is not None
+                and usage.get("prompt_tokens") is not None):
+            billed_output = max(call_usage["output_tokens"],
+                                int(usage["total_tokens"]) - call_usage["input_tokens"])
+            if reasoning_tokens is None and billed_output > call_usage["output_tokens"]:
+                reasoning_tokens = billed_output - call_usage["output_tokens"]
+            call_usage["output_tokens"] = billed_output
         with self._usage_lock:
             self.totals["requests"] += 1
             for key, value in call_usage.items():
@@ -157,6 +168,6 @@ class OpenAICompatAdapter:
                 "returned_model": payload.get("model"),
                 "system_fingerprint": payload.get("system_fingerprint"),
                 "raw_response": raw_text,
-                "reasoning_tokens": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")}
+                "reasoning_tokens": reasoning_tokens}
         taxon, matched = match_candidate(text, context.get("candidates", []))
         return ([{"taxon": taxon, "matched": matched, "raw": raw_text}], info)
