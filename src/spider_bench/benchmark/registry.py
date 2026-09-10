@@ -14,7 +14,10 @@ def load_registry(directory: str | Path = DEFAULT_DIR) -> dict[str, dict[str, An
     """Load all model configs keyed by id. Raises on duplicate ids."""
     out: dict[str, dict[str, Any]] = {}
     for f in sorted(Path(directory).glob("*.yaml")):
-        data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            raise ValueError(f"invalid YAML in {f}: {e}") from e
         mid = data.get("id") or f.stem
         if mid in out:
             raise ValueError(f"duplicate model id: {mid}")

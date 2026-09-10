@@ -24,4 +24,4 @@ price_output_1k_tokens: 0.0025
 # Runner limits.
 timeout_s: 180
 max_tasks_default: 10
-notes: Cheapest entry: AI Studio free tier (rate-limited), then PAYG above.
+notes: "Cheapest entry: AI Studio free tier (rate-limited), then PAYG above."

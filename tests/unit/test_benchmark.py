@@ -544,3 +544,14 @@ def test_effort_and_seed_wiring(monkeypatch):
                    client=FakeBedrock()).predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})
     extra = exchange["additionalModelRequestFields"]
     assert extra["thinking"] == {"type": "adaptive"} and extra["output_config"] == {"effort": "medium"}
+
+
+def test_registry_bad_yaml_names_file(tmp_path):
+    from spider_bench.benchmark.registry import load_registry
+
+    (tmp_path / "bad.yaml").write_text("notes: oh no: broken\n  - [\n")
+    try:
+        load_registry(tmp_path)
+        raise AssertionError("expected ValueError")
+    except ValueError as e:
+        assert "bad.yaml" in str(e)
