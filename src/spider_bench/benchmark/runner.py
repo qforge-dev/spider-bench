@@ -46,9 +46,13 @@ def _context(t: dict[str, Any]) -> dict[str, Any]:
 
 def _predict_once(adapter: Any, task: dict[str, Any],
                   loader: Callable[[dict[str, Any]], bytes] | None,
-                  timeout_s: float, ex: _fut.ThreadPoolExecutor) -> list[dict[str, Any]]:
+                  timeout_s: float, ex: _fut.ThreadPoolExecutor) -> tuple[Any, dict[str, Any]]:
+    """Returns (predictions, info). Legacy adapters return just predictions."""
     img = _load_image_bytes(task, loader)
-    return ex.submit(adapter.predict, img, _context(task)).result(timeout=timeout_s)
+    out = ex.submit(adapter.predict, img, _context(task)).result(timeout=timeout_s)
+    if isinstance(out, tuple) and len(out) == 2 and isinstance(out[1], dict):
+        return out[0], out[1]
+    return out, {}
 
 
 def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *,
@@ -105,13 +109,14 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
         t0 = time.time()
         for attempt in range(retries + 1):
             try:
-                preds = call_limited(task)
-                usage = dict(getattr(adapter, "last_usage", None) or {})
+                preds, info = call_limited(task)
+                usage = dict(info.get("usage") or getattr(adapter, "last_usage", None) or {})
                 return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                         "tasks_hash": thash, "image_sha256": task["image_sha256"],
                         "predictions": preds, "error": None,
                         "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
-                        "usage": usage}
+                        "usage": usage,
+                        "reasoning": info.get("reasoning") or getattr(adapter, "last_reasoning", "") or ""}
             except Exception as e:  # noqa: BLE001 - per-row isolation
                 last = e
                 if _is_transient(e) and attempt < retries:

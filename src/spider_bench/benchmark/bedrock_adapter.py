@@ -118,6 +118,17 @@ class BedrockAdapter:
                            "output_tokens": int(usage.get("outputTokens", 0) or 0),
                            "cached_input_tokens": int(
                                usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)}
+        info = {"usage": {"input_tokens": int(usage.get("inputTokens", 0) or 0),
+                          "output_tokens": int(usage.get("outputTokens", 0) or 0),
+                          "cached_input_tokens": int(
+                              usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)},
+                "reasoning": ""}
+        for block in resp.get("output", {}).get("message", {}).get("content", []) or []:
+            if isinstance(block, dict) and block.get("reasoningContent"):
+                rc = block["reasoningContent"]
+                info["reasoning"] = (rc.get("text", "") or "")[:8000]
+        self.last_reasoning = info["reasoning"]
         taxon, matched = match_candidate(text, cands)
-        return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                 "matched": matched, "raw": text}]
+        preds = [{"taxon": taxon, "score": 1.0 if matched else 0.0,
+                  "matched": matched, "raw": text}]
+        return (preds, info)

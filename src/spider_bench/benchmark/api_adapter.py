@@ -7,6 +7,7 @@ Token usage accumulates in .totals for cost guards. HTTP layer injectable.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 from typing import Any, Callable
@@ -134,7 +135,8 @@ class OpenAICompatAdapter:
         if self._cfg.get("temperature") is not None:
             body["temperature"] = self._cfg["temperature"]
         if self._cfg.get("reasoning_effort") and self._cfg.get("reasoning_api", "openai") != "none":
-            body["reasoning"] = {"effort": self._cfg["reasoning_effort"]}
+            body["reasoning"] = {"effort": self._cfg["reasoning_effort"],
+                                 "summary": self._cfg.get("reasoning_summary", "auto")}
         if self._cfg.get("seed") is not None:
             body["seed"] = self._cfg["seed"]
         body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]
@@ -153,10 +155,22 @@ class OpenAICompatAdapter:
             except httpx.HTTPStatusError as e:
                 raise RuntimeError(f"HTTP {r.status_code}: {r.text[:500]}") from e
             payload = r.json()
+        msg = {}
         try:
-            text = payload["choices"][0]["message"]["content"] or ""
+            msg = payload["choices"][0]["message"] or {}
+            text = msg.get("content") or ""
         except (KeyError, IndexError, TypeError):
             text = ""
+        reasoning_parts = []
+        for item in msg.get("reasoning_content", []) or []:
+            if isinstance(item, dict):
+                for key in ("summary_text", "text", "summary"):
+                    if item.get(key):
+                        reasoning_parts.append(str(item[key]))
+                        break
+        for item in payload.get("choices", [{}])[0].get("reasoning", []) or []:
+            reasoning_parts.append(json.dumps(item)[:2000] if not isinstance(item, str) else item[:2000])
+        self.last_reasoning = "\n".join(reasoning_parts)[:8000]
         if self._cfg.get("structured_output"):
             try:
                 import json as _json3
@@ -175,6 +189,9 @@ class OpenAICompatAdapter:
                            "output_tokens": int(usage.get("completion_tokens", 0) or 0),
                            "cached_input_tokens": int(
                                ((usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)) or 0)}
+        info = {"usage": dict(self.last_usage),
+                "reasoning": getattr(self, "last_reasoning", "") or ""}
         taxon, matched = match_candidate(text, context.get("candidates", []))
-        return [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                 "matched": matched, "raw": text}]
+        preds = [{"taxon": taxon, "score": 1.0 if matched else 0.0,
+                  "matched": matched, "raw": text}]
+        return (preds, info)

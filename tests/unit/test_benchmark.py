@@ -148,8 +148,9 @@ def test_api_adapter_parses_and_tracks_cost(monkeypatch):
                              "key_env": "T_KEY", "temperature": 0.0, "max_output_tokens": 10,
                              "price_per_1k_requests": 1.0, "price_input_1k_tokens": 2.0,
                              "price_output_1k_tokens": 4.0}, post=fake_post)
-    preds = a.predict(b"img", {"candidates": ["Aa a", "Bb b"], "image_public_url": "https://x/i.jpg"})
+    preds, info = a.predict(b"img", {"candidates": ["Aa a", "Bb b"], "image_public_url": "https://x/i.jpg"})
     assert preds[0]["taxon"] == "Bb b" and preds[0]["matched"] is True
+    assert info["usage"] == {"input_tokens": 100, "output_tokens": 5, "cached_input_tokens": 0}
     assert a.totals == {"requests": 1, "input_tokens": 100, "output_tokens": 5,
                           "cached_input_tokens": 0}
     assert a.estimated_cost() == 1 / 1000 * 1.0 + 100 / 1000 * 2.0 + 5 / 1000 * 4.0
@@ -397,7 +398,7 @@ def test_bedrock_adapter_converse_shape_and_usage():
                         "max_output_tokens": 100,
                         "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
                         "price_output_1k_tokens": 0.0}, client=FakeBedrock())
-    preds = a.predict(b"\xff\xd8\xff" + b"0" * 10,
+    preds, _ = a.predict(b"\xff\xd8\xff" + b"0" * 10,
                       {"candidates": ["Aa a", "Bb b"], "prompt": "Pick one."})
     assert preds[0] == {"taxon": "Bb b", "score": 1.0, "matched": True, "raw": "Bb b"}
     assert a.totals["input_tokens"] == 50 and a.estimated_cost() == 0.0
@@ -424,7 +425,7 @@ def test_structured_flag_gates_both_adapters(monkeypatch):
     assert "response_format" not in seen  # default off: behavior unchanged
     a.predict(b"", {"candidates": ["Aa a"]})
     b = OpenAICompatAdapter({**base, "structured_output": True}, post=fake_post)
-    preds = b.predict(b"", {"candidates": ["Aa a"]})
+    preds, _ = b.predict(b"", {"candidates": ["Aa a"]})
     assert seen["response_format"]["type"] == "json_schema"
     assert preds[0] == {"taxon": "Aa a", "score": 1.0, "matched": True, "raw": "Aa a"}
 
@@ -437,7 +438,7 @@ def test_structured_flag_gates_both_adapters(monkeypatch):
                         "structured_output": False,
                         "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
                         "price_output_1k_tokens": 0.0}, client=FakeBedrock())
-    assert c.predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})[0]["taxon"] == "Aa a"
+    assert c.predict(b"\xff\xd8\xff", {"candidates": ["Aa a"]})[0][0]["taxon"] == "Aa a"
 
 
 def test_tag_content_wins_over_prose():
@@ -522,7 +523,7 @@ def test_effort_and_seed_wiring(monkeypatch):
             "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
             "price_output_1k_tokens": 0.0}
     OpenAICompatAdapter(base, post=fake_post).predict(b"", {"candidates": ["Aa a"]})
-    assert seen["reasoning"] == {"effort": "high"} and seen["seed"] == 42
+    assert seen["reasoning"] == {"effort": "high", "summary": "auto"} and seen["seed"] == 42
     # reasoning_api none -> omitted
     seen.clear()
     OpenAICompatAdapter({**base, "reasoning_api": "none"},
