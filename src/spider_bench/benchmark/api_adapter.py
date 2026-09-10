@@ -134,10 +134,15 @@ class OpenAICompatAdapter:
             }
         if self._cfg.get("temperature") is not None:
             body["temperature"] = self._cfg["temperature"]
-        # Azure/OpenAI Chat Completions shape: flat reasoning_effort string.
-        # (The nested reasoning object belongs to the Responses API.)
+        # Effort shape depends on the endpoint. Chat Completions
+        # (Azure/OpenAI, xAI native): flat reasoning_effort string.
+        # OpenRouter-routed models: nested reasoning object (see OpenRouter
+        # reasoning-tokens docs). reasoning_style selects; default flat.
         if self._cfg.get("reasoning_effort") and self._cfg.get("reasoning_api", "openai") != "none":
-            body["reasoning_effort"] = self._cfg["reasoning_effort"]
+            if self._cfg.get("reasoning_style", "flat") == "nested":
+                body["reasoning"] = {"effort": self._cfg["reasoning_effort"]}
+            else:
+                body["reasoning_effort"] = self._cfg["reasoning_effort"]
         if self._cfg.get("seed") is not None:
             body["seed"] = self._cfg["seed"]
         body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]

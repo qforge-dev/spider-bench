@@ -46,6 +46,7 @@ def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
             "token_param": str(cfg.get("token_param", "max_tokens")),
             "reasoning_effort": cfg.get("reasoning_effort"),
             "reasoning_api": str(cfg.get("reasoning_api", "openai")),
+            "reasoning_style": str(cfg.get("reasoning_style", "flat")),
             "seed": cfg.get("seed"),
             "price_per_1k_requests": float(cfg.get("price_per_1k_requests", 0.0)),
             "price_input_1k_tokens": float(cfg.get("price_input_1k_tokens", 0.0)),

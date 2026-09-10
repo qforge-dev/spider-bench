@@ -12,6 +12,7 @@ model: x-ai/grok-4.6
 max_output_tokens: 2000
 token_param: max_tokens
 reasoning_effort: medium
+reasoning_style: nested  # OpenRouter shape; xAI native is flat
 # temperature omitted: provider default until tested
 # Pricing in USD per 1k tokens (no per-request fee).
 # Source: OpenRouter screenshot, 2026-09-10 (SpaceXAI ZDR: $2/$6/1M in/out,

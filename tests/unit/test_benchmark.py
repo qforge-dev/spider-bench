@@ -573,3 +573,26 @@ def test_registry_bad_yaml_names_file(tmp_path):
 
 def test_bedrock_answer_behind_thinking_blocks():
     pass
+
+
+def test_reasoning_style_switch(monkeypatch):
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+
+    seen = {}
+
+    def fake_post(url, body, headers):
+        seen.clear()
+        seen.update(body)
+        return {"choices": [{"message": {"content": "Aa a"}}], "usage": {}}
+
+    monkeypatch.setenv("T_KEY", "sekret")
+    base = {"id": "o", "base_url": "https://x/v1", "model": "m", "key_env": "T_KEY",
+            "temperature": None, "token_param": "max_tokens", "max_output_tokens": 10,
+            "reasoning_effort": "medium",
+            "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+            "price_output_1k_tokens": 0.0}
+    OpenAICompatAdapter(base, post=fake_post).predict(b"", {"candidates": ["Aa a"]})
+    assert seen["reasoning_effort"] == "medium" and "reasoning" not in seen
+    OpenAICompatAdapter({**base, "reasoning_style": "nested"},
+                        post=fake_post).predict(b"", {"candidates": ["Aa a"]})
+    assert seen["reasoning"] == {"effort": "medium"} and "reasoning_effort" not in seen
