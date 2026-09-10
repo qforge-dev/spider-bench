@@ -39,6 +39,9 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
                 if cf == gf:
                     family += 1
         img = t.get("image_public_url", "")
+        sys_txt = html.escape(str(t.get("system_prompt") or t.get("prompt") or ""))
+        user_txt = html.escape(str(t.get("user_prompt") or ""))
+        raw_txt = html.escape(str(pred.get("raw") or ""))
         cards.append(
             f"<div class='card {cls}'>"
             f"<a href='{img}'><img loading='lazy' src='{img}' alt=''></a>"
@@ -47,6 +50,9 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
             f"<div class='pred'>→ <i>{html.escape(str(pred.get('taxon') or '(no answer)'))}</i></div>"
             f"<div class='meta'>{html.escape(t.get('task_id', ''))}"
             f"{' · ' + html.escape(str(p.get('error', ''))[:120]) if p.get('error') else ''}</div>"
+            f"<div class='hover'><b>SYSTEM</b><pre>{sys_txt}</pre>"
+            f"<b>USER</b><pre>{user_txt}</pre>"
+            f"<b>MODEL RAW</b><pre>{raw_txt}</pre></div>"
             "</div>")
     mid = manifest.get("model_id", "?")
     def pct(a, b):
@@ -68,6 +74,10 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         ".card img{width:100%;height:150px;object-fit:cover;display:block}"
         ".badge{float:right;font-weight:bold}.ok .badge{color:#16a34a}.miss .badge{color:#dc2626}"
         ".pred{font-size:14px}.meta{font-size:12px;color:#666;word-break:break-all}"
+        ".card{position:relative}.hover{display:none;position:absolute;left:0;right:0;top:0;"
+        "max-height:100%;overflow:auto;background:rgba(17,17,17,.95);color:#eee;font-size:12px;"
+        "padding:10px;z-index:5}.card:hover .hover{display:block}"
+        ".hover pre{white-space:pre-wrap;word-break:break-word;margin:4px 0 10px}"
         ".legend{font-size:13px;color:#444}</style></head><body>"
         f"<h1>{html.escape(mid)} <small>{html.escape(manifest.get('run_id', ''))}</small></h1>"
         f"{header}"
