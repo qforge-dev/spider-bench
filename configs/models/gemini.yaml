@@ -11,7 +11,7 @@ model_env: GEMINI_MODEL
 model: gemini-2.5-flash
 # Ask the model for exactly one candidate-list name.
 reasoning_effort: medium
-max_output_tokens: 2000
+max_output_tokens: 5000
 token_param: max_tokens
 reasoning_api: none  # unverified on this endpoint; effort flags ignored
 # temperature omitted (provider default)

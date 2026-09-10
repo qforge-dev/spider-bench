@@ -94,6 +94,9 @@ def pick_candidates(taxon: str, accept: set[str], client: httpx.Client,
         for obs in results:
             if len(out) >= n or obs.get("id") in seen_obs:
                 continue
+            returned_taxon = obs.get("taxon") or {}
+            if returned_taxon.get("name") != taxon or returned_taxon.get("rank") not in {"species", "subspecies"}:
+                continue
             user = obs.get("user") or {}
             for p in obs.get("photos") or []:
                 lic = normalize_license(p.get("license_code"))
@@ -232,14 +235,10 @@ def gap_fill_commons(taxa: list[str], profile: str = "research",
                                             "license": lic, "reason": rec.get("review_reason") or "sharealike_or_ambiguous"})
                         continue
                     if lic in accept and m.get("media_url"):
-                        raw_url = m["media_url"]
-                        clean_url = raw_url.split("?")[0]  # drop ?utm_source tracking junk
-                        picked = {"taxon": name, "url": clean_url, "license": lic,
-                                  "creator": m.get("creator"), "observation_id": None,
-                                  "photo_id": m.get("title"), "attribution": m.get("attribution"),
-                                  "research_grade": False, "source": "commons",
-                                  "file_page": m.get("source_url")}
-                        break
+                        # Search matches and category membership are not verified species labels.
+                        review_list.append({"taxon": name, "title": m.get("title"),
+                                            "license": lic, "reason": "species_label_requires_manual_review"})
+                        continue
                 if picked:
                     break
             if picked:
@@ -260,7 +259,7 @@ def record_media_row(conn: sqlite3.Connection, *, taxon: str, s3_uri: str, publi
                      license: str, creator: str | None, attribution: str | None,
                      source: str, source_media_id: str, sha256: str,
                      observation_id: str | None = None, quality_grade: str | None = None,
-                     country: str | None = "PL", place_guess: str | None = None,
+                     country: str | None = None, place_guess: str | None = None,
                      width: int | None = None, height: int | None = None) -> None:
     obs_row_id = None
     if observation_id:

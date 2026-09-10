@@ -1023,145 +1023,158 @@ def benchmark_build_tasks(
     typer.echo(f"tasks={len(tasks)} wrote={tp}")
 
 
+@benchmark_app.command("prepare")
+def benchmark_prepare(
+    source: str = typer.Option("data/benchmarks/species-id-v2/query/tasks.jsonl", "--source"),
+    out: str = typer.Option("data/benchmarks/species-id-v5", "--out"),
+    seed: int = typer.Option(42, "--seed"),
+) -> None:
+    """Verify source labels, normalize/deduplicate images and freeze a new suite."""
+    from spider_bench.benchmark.prepare import prepare_suite, validate_suite
+    prepare_suite(source, out, seed=seed)
+    typer.echo(json.dumps(validate_suite(out), indent=2))
+
+
+@benchmark_app.command("validate")
+def benchmark_validate(suite: str = typer.Option("species-id-v5", "--suite")) -> None:
+    """Verify task hashes, source evidence, candidate lists and every image."""
+    from spider_bench.benchmark.prepare import validate_suite
+    typer.echo(json.dumps(validate_suite(Path("data/benchmarks") / suite), indent=2))
+
+
 @benchmark_app.command("run")
 def benchmark_run(
     tasks: Optional[str] = typer.Option(None, "--tasks"),
     model: str = typer.Option("constant-reference", "--model"),
     registry: str = typer.Option("configs/models", "--registry"),
     out: Optional[str] = typer.Option(None, "--out"),
-    timeout: float = typer.Option(120.0, "--timeout"),
+    timeout: float = typer.Option(180.0, "--timeout"),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
-    image_source: str = typer.Option("s3", "--image-source", help="s3|none (none passes empty bytes)"),
+    image_source: str = typer.Option("s3", "--image-source", help="s3/local: prepared bytes; none: no-image control"),
     max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
-    max_cost: Optional[float] = typer.Option(None, "--max-cost", help="USD ceiling (API models); stops early"),
+    max_cost: Optional[float] = typer.Option(None, "--max-cost"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
-    suite: str = typer.Option("species-id-v4", "--suite"),
-    concurrency: int = typer.Option(4, "--concurrency", help="parallel model requests"),
-    effort: Optional[str] = typer.Option(None, "--effort", help="low|medium|high (overrides registry)"),
-    seed: Optional[int] = typer.Option(None, "--seed", help="sampling seed (overrides registry)"),
-    rate_limit: float = typer.Option(0.0, "--rate-limit", help="max requests/sec total (0 = unlimited)"),
-    retries: int = typer.Option(3, "--retries", help="retries on timeouts/429/5xx with backoff"),
+    suite: str = typer.Option("species-id-v5", "--suite"),
+    concurrency: int = typer.Option(4, "--concurrency"),
+    effort: Optional[str] = typer.Option(None, "--effort"),
+    seed: Optional[int] = typer.Option(None, "--seed", help="must match the seed of the frozen suite"),
+    model_seed: Optional[int] = typer.Option(None, "--model-seed", help="optional provider RNG seed, if supported"),
+    sample_seed: int = typer.Option(42, "--sample-seed", help="deterministic species-stratified task order"),
+    rate_limit: float = typer.Option(0.0, "--rate-limit"),
+    retries: int = typer.Option(3, "--retries"),
 ) -> None:
-    """Run a model over tasks. Paths resolve from --suite/--run-id; keys from env only."""
-    import datetime as _dt
-
+    """Run a validated v5 snapshot; checkpoint provenance before any requests."""
+    import datetime as dt
+    import hashlib
+    import subprocess
+    import shutil
     from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
+    from spider_bench.benchmark.prepare import validate_suite
+    from spider_bench.benchmark.protocol import sample_tasks
     from spider_bench.benchmark.runner import run_tasks
-    from spider_bench.benchmark.tasks import read_tasks
+    from spider_bench.benchmark.tasks import read_tasks, tasks_hash
+    from spider_bench.benchmark.registry import load_registry, resolve_model
 
-    adapters: dict = {"perfect-reference": PerfectAdapter(),
-                      "constant-reference": ConstantAdapter()}
+    if image_source not in {"s3", "local", "none"}:
+        raise typer.BadParameter("image-source must be s3, local or none")
+    tasks_path = Path(tasks) if tasks else Path("data/benchmarks") / suite / "tasks.jsonl"
+    if tasks_path.name != "tasks.jsonl":
+        raise typer.BadParameter("--tasks must select a prepared suite's tasks.jsonl")
+    validate_suite(tasks_path.parent)
+    suite_info = json.loads((tasks_path.parent / "manifest.json").read_text())
+    suite = suite_info["suite"]
+    if seed is not None and seed != suite_info["seed"]:
+        raise typer.BadParameter("seed differs from the frozen suite; prepare a new suite for a different seed")
+    rows = sample_tasks(read_tasks(tasks_path), max_tasks, sample_seed)
     run_id, out_path = _run_predictions(run_id, out, model)
-    manifest_extra: dict = {"suite": suite, "run_id": run_id}
-    if model not in adapters:
-        from spider_bench.benchmark.registry import load_registry, resolve_model
-
-        reg = load_registry(registry)
-        if model not in reg:
-            raise typer.BadParameter(f"unknown model '{model}'; registry has {sorted(reg)}")
-        resolved = resolve_model(reg[model])  # raises if key env missing; never logs the key
-        kind = resolved.get("adapter", "openai-compatible")
-        if kind == "bedrock-converse":
+    resolved = None
+    if model == "perfect-reference":
+        adapter = PerfectAdapter()
+    elif model == "constant-reference":
+        adapter = ConstantAdapter()
+    else:
+        resolved = resolve_model(load_registry(registry)[model])
+        if effort is not None:
+            if effort not in {"low", "medium", "high"}:
+                raise typer.BadParameter("effort must be low, medium or high")
+            resolved["reasoning_effort"] = effort
+        if model_seed is not None:
+            if resolved["adapter"] == "bedrock-converse":
+                raise typer.BadParameter("Bedrock adapter does not support a provider sampling seed")
+            resolved["seed"] = model_seed
+        resolved["timeout_s"] = timeout
+        if resolved["adapter"] == "bedrock-converse":
             from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
-
-            adapters[model] = BedrockAdapter(resolved)
+            adapter = BedrockAdapter(resolved)
         else:
             from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
-
-            adapters[model] = OpenAICompatAdapter(resolved)
-        manifest_extra["pricing_usd"] = {
-            "per_1k_requests": resolved["price_per_1k_requests"],
-            "input_1k_tokens": resolved["price_input_1k_tokens"],
-            "output_1k_tokens": resolved["price_output_1k_tokens"]}
-        if effort is not None:
-            if effort not in ("low", "medium", "high"):
-                raise typer.BadParameter("--effort must be low, medium or high")
-            resolved["reasoning_effort"] = effort
-        if seed is not None:
-            resolved["seed"] = seed
-    rows = read_tasks(tasks_path := _suite_tasks(suite, tasks))
-    if max_tasks:
-        rows = rows[:max_tasks]
-
-    def loader(t: dict) -> bytes:
-        if image_source == "none":
-            return b""
-        import httpx
-
-        cache = Path("data/work/image-cache")
-        cache.mkdir(parents=True, exist_ok=True)
-        p = cache / f"{t['image_sha256']}.bin"
-        if p.exists():
-            return p.read_bytes()
-        url = t.get("image_public_url") or ""
-        r = httpx.get(url, timeout=60)
-        r.raise_for_status()
-        p.write_bytes(r.content)
-        return r.content
-
-    adapter = adapters[model]
+            adapter = OpenAICompatAdapter(resolved)
+        if max_cost is None or max_cost <= 0:
+            raise typer.BadParameter("API runs require an explicit positive --max-cost")
+    config_fields = ("adapter", "model", "base_url", "region", "temperature", "token_param",
+                     "structured_output", "reasoning_effort", "reasoning_api", "reasoning_style",
+                     "seed", "max_output_tokens")
+    config = {key: resolved.get(key) for key in config_fields} if resolved else {"adapter": "reference"}
+    condition = "no_image" if image_source == "none" else "image"
+    params = {"timeout_s": timeout, "concurrency": concurrency, "rate_limit": rate_limit,
+              "retries": retries, "max_tasks": max_tasks, "max_cost": max_cost,
+              "condition": condition, "sample_seed": sample_seed, "suite_seed": suite_info["seed"]}
+    code_files = sorted(Path("src/spider_bench/benchmark").glob("*.py")) + [Path(__file__)]
+    code_hash = hashlib.sha256(b"".join(p.name.encode() + p.read_bytes() for p in code_files)).hexdigest()
+    fingerprint = {"tasks_hash": tasks_hash(rows), "adapter": config, "params": params, "code_hash": code_hash}
+    run_hash = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
     run_dir = Path(out_path).parent
     run_dir.mkdir(parents=True, exist_ok=True)
-    import shutil as _shutil
+    manifest_path = run_dir / "manifest.json"
+    if manifest_path.exists():
+        previous = json.loads(manifest_path.read_text())
+        if not resume or previous.get("run_hash") != run_hash:
+            raise typer.BadParameter("run already exists with a different configuration; choose a new run ID")
+        if previous.get("status") == "complete":
+            raise typer.BadParameter("run is already complete; choose a new run ID")
+        if resolved and Path(out_path).exists():
+            from spider_bench.benchmark.runner import read_predictions
+            ledger = read_predictions(out_path)
+            adapter.totals = {"requests": sum(not p.get("error") for p in ledger),
+                             **{key: sum(p.get("usage", {}).get(key, 0) for p in ledger)
+                                for key in ("input_tokens", "output_tokens", "cached_input_tokens")}}
+    elif Path(out_path).exists() and Path(out_path).stat().st_size:
+        raise typer.BadParameter("predictions exist without a manifest; choose a new run ID")
+    snapshot = "".join(json.dumps(t, sort_keys=True) + "\n" for t in rows)
+    if (run_dir / "tasks.jsonl").exists() and (run_dir / "tasks.jsonl").read_text() != snapshot:
+        raise typer.BadParameter("run task snapshot mismatch")
+    (run_dir / "tasks.jsonl").write_text(snapshot)
+    shutil.copyfile(tasks_path.parent / "manifest.json", run_dir / "suite-manifest.json")
+    manifest = {"model_id": adapter.model_id, "suite": suite, "run_id": run_id,
+                "protocol_version": 5, "run_hash": run_hash, **fingerprint,
+                "tasks": len(rows), "status": "running", "condition": condition,
+                "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "git_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                "dirty_tree": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())}
+    if resolved:
+        manifest["pricing_usd"] = {k: resolved[k] for k in (
+            "price_per_1k_requests", "price_input_1k_tokens", "price_output_1k_tokens", "price_cached_1k_tokens")}
+    manifest_path.write_text(json.dumps(manifest, indent=2))
 
-    (run_dir / "tasks.jsonl").write_text(
-        "\n".join(json.dumps(t, sort_keys=True) for t in rows) + "\n", encoding="utf-8")
-    suite_manifest = tasks_path.parent / "manifest.json"
-    if suite_manifest.exists():
-        _shutil.copy(suite_manifest, run_dir / "suite-manifest.json")
-    total = len(rows)
-    step = max(1, total // 50)  # ~50 progress lines per run
-    import time as _time
+    def loader(t: dict) -> bytes:
+        if condition == "no_image":
+            return b""
+        data = Path(t["image_local_path"]).read_bytes()
+        if hashlib.sha256(data).hexdigest() != t["image_sha256"]:
+            raise ValueError("prepared image hash changed")
+        return data
 
-    t_start = _time.time()
+    def progress(done: int, total: int) -> None:
+        if done % max(1, total // 30) == 0 or done == total:
+            typer.echo(f"{done}/{total}", err=True)
 
-    def _progress(done_n: int, total_n: int) -> None:
-        if done_n % step == 0 or done_n == total_n:
-            el = _time.time() - t_start
-            rate = done_n / el if el > 0 else 0.0
-            eta = (total_n - done_n) / rate if rate > 0 else 0.0
-            cost = ""
-            if hasattr(adapter, "estimated_cost"):
-                try:
-                    cost = f" cost=${adapter.estimated_cost():.4f}"
-                except Exception:
-                    pass
-            typer.echo(f"[{done_n}/{total_n}] {done_n / total_n * 100:.0f}% "
-                       f"elapsed={el:.0f}s eta={eta:.0f}s{cost}", err=True)
-
-    typer.echo(f"starting run model={getattr(adapter, 'model_id', model)} tasks={total}", err=True)
     summary = run_tasks(rows, adapter, out_path, loader=loader, timeout_s=timeout,
-                        resume=resume, max_cost=max_cost, progress=_progress,
+                        resume=resume, max_cost=max_cost, progress=progress,
                         max_workers=concurrency, rate_limit=rate_limit, retries=retries)
-    def _git_sha() -> str:
-        try:
-            import subprocess as _sp
-
-            return _sp.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        except Exception:
-            return "unknown"
-
-    manifest = {"model_id": getattr(adapter, "model_id", model), **manifest_extra,
-                "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
-                "usage": summary.get("usage", {}),
-                "estimated_cost_usd": summary.get("estimated_cost_usd"),
-                "errors": summary["errors"], "retried": summary.get("retried", 0),
-                "started_at": _dt.datetime.fromtimestamp(
-                    _dt.datetime.now(_dt.timezone.utc).timestamp() - summary.get("seconds", 0),
-                    tz=_dt.timezone.utc).isoformat(),
-                "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-                "git_sha": _git_sha(),
-                "params": {"timeout_s": timeout, "concurrency": concurrency,
-                           "rate_limit": rate_limit, "retries": retries,
-                           "max_tasks": max_tasks, "max_cost": max_cost,
-                           "image_source": image_source},
-                "adapter": {k: locals().get("resolved", {}).get(k)
-                            for k in ("adapter", "model", "base_url", "temperature",
-                                      "token_param", "structured_output", "reasoning_effort",
-                                      "reasoning_api", "seed", "max_output_tokens")}
-                if "resolved" in locals() else {"adapter": "reference"}}
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    (Path(out_path).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    manifest.update({"status": "stopped" if summary.get("stopped_early") else "complete",
+                     "usage": summary.get("usage", {}), "estimated_cost_usd": summary.get("estimated_cost_usd"),
+                     "summary": summary, "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+    manifest_path.write_text(json.dumps(manifest, indent=2))
     typer.echo(json.dumps(summary, indent=2))
 
 
@@ -1256,109 +1269,11 @@ def benchmark_run_dual(
     rate_limit: float = typer.Option(0.0, "--rate-limit"),
     retries: int = typer.Option(3, "--retries"),
 ) -> None:
-    """One run, two requests per sample: latin labels then english labels.
-
-    Same images, same adapter instance (shared spend tracking): latin suite
-    first, english second. Writes runs/<run-id>-latin|english + comparison.
-    """
-    import datetime as _dt
-
-    from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
-    from spider_bench.benchmark.runner import read_predictions, run_tasks
-    from spider_bench.benchmark.scorer import score
-    from spider_bench.benchmark.tasks import read_tasks
-
-    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
-    from spider_bench.benchmark.registry import load_registry, resolve_model
-
-    adapters: dict = {"perfect-reference": PerfectAdapter(),
-                      "constant-reference": ConstantAdapter()}
-    if model not in adapters:
-        reg = load_registry(registry)
-        if model not in reg:
-            raise typer.BadParameter(f"unknown model '{model}'; registry has {sorted(reg)}")
-        resolved = resolve_model(reg[model])
-        kind = resolved.get("adapter", "openai-compatible")
-        if kind == "bedrock-converse":
-            from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
-
-            adapters[model] = BedrockAdapter(resolved)
-        else:
-            adapters[model] = OpenAICompatAdapter(resolved)
-    adapter = adapters[model]
-    rid = run_id or f"{model}-dual-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-
-    def loader(t: dict) -> bytes:
-        if image_source == "none":
-            return b""
-        import httpx
-
-        cache = Path("data/work/image-cache")
-        cache.mkdir(parents=True, exist_ok=True)
-        p = cache / f"{t['image_sha256']}.bin"
-        if p.exists():
-            return p.read_bytes()
-        url = t.get("image_public_url") or ""
-        r = httpx.get(url, timeout=60)
-        r.raise_for_status()
-        p.write_bytes(r.content)
-        return r.content
-
-    results = {}
-    for variant, suite in (("latin", latin_suite), ("english", english_suite)):
-        base = Path("data/benchmarks") / suite
-        tp = base / "tasks.jsonl"
-        if not tp.exists():
-            raise typer.BadParameter(f"suite {suite} has no tasks.jsonl (build it first)")
-        rows = read_tasks(tp)
-        if max_tasks:
-            rows = rows[:max_tasks]
-        out = Path("data/benchmarks/runs") / f"{rid}-{variant}" / "predictions.jsonl"
-        summary = run_tasks(rows, adapter, out, loader=loader, timeout_s=timeout,
-                            resume=True, max_cost=max_cost, max_workers=concurrency,
-                            rate_limit=rate_limit, retries=retries)
-        manifest = {"model_id": getattr(adapter, "model_id", model), "suite": suite,
-                    "run_id": f"{rid}-{variant}", "variant": variant,
-                    "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
-                    "usage": summary.get("usage", {}),
-                    "estimated_cost_usd": summary.get("estimated_cost_usd"),
-                    "errors": summary["errors"],
-                    "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
-        (out.parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        scores = score(rows, read_predictions(out))
-        (out.parent / "scores.json").write_text(json.dumps(scores, indent=2), encoding="utf-8")
-        results[variant] = {"summary": summary, "scores": scores, "rows": rows,
-                            "preds": read_predictions(out)}
-        typer.echo(f"{variant}: top1={scores.get('top1', 0):.3f} "
-                   f"errors={scores.get('errors')} cost=${summary.get('estimated_cost_usd')}",
-                   err=True)
-    # paired comparison on shared images (matched by image sha suffix)
-    lat = {p["task_id"].split(":")[-1]: p for p in results["latin"]["preds"]}
-    eng = {p["task_id"].split(":")[-1]: p for p in results["english"]["preds"]}
-    lat_tasks = {t["task_id"].split(":")[-1]: t for t in results["latin"]["rows"]}
-    eng_tasks = {t["task_id"].split(":")[-1]: t for t in results["english"]["rows"]}
-    from spider_bench.benchmark.scorer import is_correct
-
-    def _ok(pred: dict, task: dict) -> bool:
-        top = (pred.get("predictions") or [{}])[0]
-        return bool(top.get("matched")) and is_correct(task, top.get("taxon", ""))
-
-    both = lat_only = eng_only = neither = 0
-    for key, lp in lat.items():
-        if key not in eng or key not in lat_tasks or key not in eng_tasks:
-            continue
-        lok, eok = _ok(lp, lat_tasks[key]), _ok(eng[key], eng_tasks[key])
-        both += lok and eok
-        lat_only += lok and not eok
-        eng_only += (not lok) and eok
-        neither += (not lok) and (not eok)
-    comparison = {"latin_top1": results["latin"]["scores"].get("top1"),
-                  "english_top1": results["english"]["scores"].get("top1"),
-                  "paired": {"both": both, "latin_only": lat_only,
-                             "english_only": eng_only, "neither": neither}}
-    (Path("data/benchmarks/runs") / f"{rid}-english" / "comparison.json").write_text(
-        json.dumps(comparison, indent=2), encoding="utf-8")
-    typer.echo(json.dumps(comparison, indent=2))
+    """Disabled legacy Latin/English runner; use the validated benchmark run command."""
+    raise typer.BadParameter(
+        "run-dual uses an obsolete protocol and is disabled. "
+        "Use benchmark run with a prepared suite (default: species-id-v5)."
+    )
 
 
 @benchmark_app.command("split")
@@ -1451,7 +1366,7 @@ def benchmark_models(
 def benchmark_score(
     tasks: Optional[str] = typer.Option(None, "--tasks"),
     predictions: Optional[str] = typer.Option(None, "--predictions"),
-    suite: str = typer.Option("species-id-v4", "--suite"),
+    suite: str = typer.Option("species-id-v5", "--suite"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
     out: Optional[str] = typer.Option(None, "--out", help="write scores.json here (default: beside predictions)"),
 ) -> None:
@@ -1472,6 +1387,8 @@ def benchmark_score(
         if not runs:
             raise typer.BadParameter("no runs found; pass --predictions or --run-id")
         pred_path = runs[-1]
+    if tasks is None and (pred_path.parent / "tasks.jsonl").exists():
+        tasks_path = pred_path.parent / "tasks.jsonl"
     scores = score(read_tasks(tasks_path), read_predictions(pred_path))
     typer.echo(f"scored {scores.get('scored')}/{scores.get('tasks')} "
                f"errors={scores.get('errors')} top1={scores.get('top1', 0):.3f}", err=True)
@@ -1485,11 +1402,17 @@ def benchmark_score(
 def benchmark_leaderboard(
     runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
     out: str = typer.Option("data/benchmarks/leaderboard.md", "--out"),
+    suite: str = typer.Option("species-id-v5", "--suite"),
+    condition: str = typer.Option("image", "--condition"),
+    task_hash: Optional[str] = typer.Option(None, "--tasks-hash", help="default: the full suite; use a hash to compare a pilot subset"),
 ) -> None:
     """Render a static leaderboard from run dirs (each needs scores.json)."""
     from spider_bench.benchmark.leaderboard import collect_runs, render_leaderboard
 
-    runs = collect_runs(runs_dir)
+    expected_hash = task_hash or json.loads((Path("data/benchmarks") / suite / "manifest.json").read_text())["tasks_hash"]
+    runs = [r for r in collect_runs(runs_dir) if r["manifest"].get("suite") == suite
+            and r["manifest"].get("condition") == condition
+            and r["manifest"].get("tasks_hash") == expected_hash]
     md, rows = render_leaderboard(runs)
     from spider_bench.benchmark.leaderboard import render_page
 
@@ -1505,7 +1428,7 @@ def benchmark_leaderboard(
 def benchmark_report(
     run_id: str = typer.Option(..., "--run-id"),
     tasks: Optional[str] = typer.Option(None, "--tasks"),
-    suite: str = typer.Option("species-id-v4", "--suite"),
+    suite: str = typer.Option("species-id-v5", "--suite"),
     runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
 ) -> None:
     """Per-sample report page for a run: image previews, correct vs predicted."""
@@ -1521,7 +1444,10 @@ def benchmark_report(
         fam = {r["taxon"]: r.get("family", "") for r in d}
     except Exception:
         pass
-    out = write_run_report(Path(runs_dir) / run_id, read_tasks(_suite_tasks(suite, tasks)), fam)
+    run_dir = Path(runs_dir) / run_id
+    snapshot = run_dir / "tasks.jsonl"
+    task_path = snapshot if tasks is None and snapshot.exists() else _suite_tasks(suite, tasks)
+    out = write_run_report(run_dir, read_tasks(task_path), fam)
     typer.echo(f"wrote {out}")
 
 

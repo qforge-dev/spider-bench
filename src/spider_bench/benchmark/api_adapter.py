@@ -1,15 +1,11 @@
-"""OpenAI-compatible vision adapter (M3): Terra / Luna / any chat-completions endpoint.
-
-Sends the task's public image URL (no byte uploads); asks for exactly one
-candidate-list name; normalizes the reply and matches it against candidates.
-Unmatched text is recorded verbatim (scores wrong, flagged unmatched).
-Token usage accumulates in .totals for cost guards. HTTP layer injectable.
-"""
+"""OpenAI-compatible adapter: shared prepared bytes, explicit answer parsing,
+provider stop reasons and per-call telemetry. Empty bytes select the no-image control."""
 from __future__ import annotations
 
 import json
 import os
 import re
+import threading
 from typing import Any, Callable
 
 
@@ -22,37 +18,15 @@ TAG_RE = re.compile(r"<\s*spider_name\s*>(.*?)<\s*/\s*spider_name\s*>",
 
 
 def match_candidate(text: str, candidates: list[str]) -> tuple[str, bool]:
-    """Match free-text reply to a candidate. Returns (taxon, matched).
-
-    Reasoning models bury the answer in prose: scan every line for a
-    candidate mention (exact or 'Genus species (…)' head form) and take the
-    LAST match — conclusions come after reasoning. Single-name replies
-    behave exactly as before.
-    """
+    """Accept one explicit answer; never guess from names mentioned in prose."""
     tagged = TAG_RE.findall(text or "")
-    if tagged:
-        text = tagged[-1]  # conclusions come last; ignore everything outside tags
-    normed = {_norm(c): c for c in candidates}
-    lines = (text or "").strip().splitlines() or [""]
-    found: str | None = None
-    for raw_line in lines:
-        line = raw_line.strip().strip("* .\"'")
-        if not line:
-            continue
-        if _norm(line) in normed:
-            found = normed[_norm(line)]
-            continue
-        head = " ".join(_norm(line).split()[:2])
-        if head in normed:
-            found = normed[head]
-            continue
-        for cand_norm, cand in normed.items():
-            if cand_norm and re.search(rf"(?<![a-z]){re.escape(cand_norm)}(?![a-z])", _norm(line)):
-                found = cand
-    if found is not None:
-        return found, True
-    first = lines[0].strip().strip("* .\"'") if lines else ""
-    return first[:200], False
+    if len(tagged) > 1:
+        return (text or ""), False
+    answer = tagged[0].strip() if tagged else (text or "").strip()
+    names = {_norm(c): c for c in candidates}
+    if _norm(answer) in names:
+        return names[_norm(answer)], True
+    return answer, False
 
 
 class OpenAICompatAdapter:
@@ -64,6 +38,7 @@ class OpenAICompatAdapter:
         self._cfg = resolved
         self._post = post  # injectable transport (tests); default below
         self.totals = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
+        self._usage_lock = threading.Lock()
 
     def _key(self) -> str:
         return os.environ.get(self._cfg.get("key_env", ""), "")
@@ -96,23 +71,18 @@ class OpenAICompatAdapter:
 
         import httpx
 
-        # Static system message first: identical across tasks, so providers
-        # cache it (candidate list ~5k tokens). Per-image content stays in user.
+        # The system instruction is shared; each user message has its frozen shortlist.
         system_text = self._system_prompt(context)
         user_text = context.get("user_prompt") or (
             "Identify the spider in this photograph. "
             "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
             "scientific name from the candidate list, and nothing outside the tags.")
-        if context.get("image_public_url"):
-            user_content: list[dict[str, Any]] = [
-                {"type": "text", "text": user_text},
-                {"type": "image_url", "image_url": {"url": context["image_public_url"]}}]
-        else:
-            b64 = base64.b64encode(image_bytes or b"").decode()
-            user_content = [
-                {"type": "text", "text": user_text},
-                {"type": "image_url",
-                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]
+        user_content: list[dict[str, Any]] = [{"type": "text", "text": user_text}]
+        if image_bytes:
+            b64 = base64.b64encode(image_bytes).decode()
+            user_content.append({"type": "image_url", "image_url": {
+                "url": f"data:image/jpeg;base64,{b64}", "detail": "high"}})
+        # Empty bytes deliberately mean the no-image control. Never fetch a URL here.
         body: dict[str, Any] = {"model": self._cfg["model"],
                 "messages": [{"role": "system", "content": system_text},
                              {"role": "user", "content": user_content}]}
@@ -161,43 +131,32 @@ class OpenAICompatAdapter:
             except httpx.HTTPStatusError as e:
                 raise RuntimeError(f"HTTP {r.status_code}: {r.text[:500]}") from e
             payload = r.json()
-        msg = {}
-        try:
-            msg = payload["choices"][0]["message"] or {}
-            text = msg.get("content") or ""
-        except (KeyError, IndexError, TypeError):
-            text = ""
-        reasoning_parts = []
-        for item in msg.get("reasoning_content", []) or []:
-            if isinstance(item, dict):
-                for key in ("summary_text", "text", "summary"):
-                    if item.get(key):
-                        reasoning_parts.append(str(item[key]))
-                        break
-        for item in payload.get("choices", [{}])[0].get("reasoning", []) or []:
-            reasoning_parts.append(json.dumps(item)[:2000] if not isinstance(item, str) else item[:2000])
-        self.last_reasoning = "\n".join(reasoning_parts)[:8000]
+        choice = (payload.get("choices") or [{}])[0]
+        msg = choice.get("message") or {}
+        raw_text = msg.get("content") or ""
+        if isinstance(raw_text, list):
+            raw_text = "".join(x.get("text", "") for x in raw_text if isinstance(x, dict))
+        text = raw_text
         if self._cfg.get("structured_output"):
             try:
-                import json as _json3
-
-                text = _json3.loads(text).get("species", "") or ""
+                text = json.loads(text).get("species", "") or ""
             except (ValueError, AttributeError):
                 pass
-        usage = payload.get("usage", {}) or {}
-        self.totals["requests"] += 1
-        self.totals["input_tokens"] += int(usage.get("prompt_tokens", 0) or 0)
-        self.totals["output_tokens"] += int(usage.get("completion_tokens", 0) or 0)
+        usage = payload.get("usage") or {}
         details = usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}
-        self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
-            details.get("cached_tokens", 0) or 0)
-        self.last_usage = {"input_tokens": int(usage.get("prompt_tokens", 0) or 0),
-                           "output_tokens": int(usage.get("completion_tokens", 0) or 0),
-                           "cached_input_tokens": int(
-                               ((usage.get("input_token_details") or usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)) or 0)}
-        info = {"usage": dict(self.last_usage),
-                "reasoning": getattr(self, "last_reasoning", "") or ""}
+        call_usage = {"input_tokens": int(usage.get("prompt_tokens", 0) or 0),
+                      "output_tokens": int(usage.get("completion_tokens", 0) or 0),
+                      "cached_input_tokens": int(details.get("cached_tokens", 0) or 0)}
+        with self._usage_lock:
+            self.totals["requests"] += 1
+            for key, value in call_usage.items():
+                self.totals[key] = self.totals.get(key, 0) + value
+        info = {"usage": call_usage, "provider_usage": usage,
+                "finish_reason": choice.get("finish_reason"),
+                "refusal": msg.get("refusal"), "response_id": payload.get("id"),
+                "returned_model": payload.get("model"),
+                "system_fingerprint": payload.get("system_fingerprint"),
+                "raw_response": raw_text,
+                "reasoning_tokens": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")}
         taxon, matched = match_candidate(text, context.get("candidates", []))
-        preds = [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                  "matched": matched, "raw": text}]
-        return (preds, info)
+        return ([{"taxon": taxon, "matched": matched, "raw": raw_text}], info)

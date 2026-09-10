@@ -1,25 +1,22 @@
-"""Isolated runner: tasks + adapter -> predictions JSONL.
+"""Parallel runner with immutable task checks, checkpoints and explicit failures.
 
-- Parallel workers (default 4) with per-row timeout; overruns recorded as
-  errors, never crash the run.
-- Transient failures (timeouts, 429/5xx) retried with exponential backoff.
-- Optional global rate limit across workers.
-- Checkpoint on every row; --resume continues. Rows stream in completion
-  order (content deterministic, order not).
-- Image bytes loader: local release dir or S3 (offline tests inject bytes).
+Provider adapters enforce transport timeouts. Retry only transport failures;
+never retry a completed invalid answer or a truncated completion for a better result.
 """
 from __future__ import annotations
 
 import concurrent.futures as _fut
 import json
+import hashlib
 import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
 
 from spider_bench.benchmark.tasks import tasks_hash
+from spider_bench.benchmark.protocol import response_status
 
-TRANSIENT_MARKERS = ("429", "503", "502", "504", "timeout", "timed out",
+TRANSIENT_MARKERS = ("429", "500", "503", "502", "504", "timeout", "timed out", "connection reset",
                      "overloaded", "rate limit", "try again", "temporarily")
 
 
@@ -37,19 +34,23 @@ def _load_image_bytes(task: dict[str, Any], loader: Callable[[dict[str, Any]], b
 
 
 def _context(t: dict[str, Any]) -> dict[str, Any]:
-    return {"candidates": t.get("candidates", []), "correct_taxon": t.get("correct_taxon", ""),
+    return {"candidates": t.get("candidates", []),
             "prompt": t.get("prompt", ""), "system_prompt": t.get("system_prompt", ""),
             "user_prompt": t.get("user_prompt", ""),
             "image_public_url": t.get("image_public_url", ""),
-            "task_id": t.get("task_id", "")}
+            "task_id": hashlib.sha256(t.get("task_id", "").encode()).hexdigest()}
 
 
 def _predict_once(adapter: Any, task: dict[str, Any],
                   loader: Callable[[dict[str, Any]], bytes] | None,
-                  timeout_s: float, ex: _fut.ThreadPoolExecutor) -> tuple[Any, dict[str, Any]]:
+                  ) -> tuple[Any, dict[str, Any]]:
     """Returns (predictions, info). Legacy adapters return just predictions."""
     img = _load_image_bytes(task, loader)
-    out = ex.submit(adapter.predict, img, _context(task)).result(timeout=timeout_s)
+    context = _context(task)
+    from spider_bench.benchmark.adapters import PerfectAdapter
+    if isinstance(adapter, PerfectAdapter):  # explicit offline plumbing oracle
+        context["correct_taxon"] = task["correct_taxon"]
+    out = adapter.predict(img, context)
     if isinstance(out, tuple) and len(out) == 2 and isinstance(out[1], dict):
         return out[0], out[1]
     return out, {}
@@ -69,12 +70,25 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
     """
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
+    thash = tasks_hash(tasks)
+    expected = {t["task_id"]: t for t in tasks}
+    if len(expected) != len(tasks):
+        raise ValueError("duplicate task IDs")
+    if out.exists() and out.stat().st_size and not resume:
+        raise ValueError("output exists; use a new run ID")
     done: dict[str, dict] = {}
     if resume and out.exists():
         for line in out.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 r = json.loads(line)
-                done[r["task_id"]] = r
+                tid = r["task_id"]
+                if tid in done or tid not in expected or r.get("tasks_hash") != thash:
+                    raise ValueError("resume predictions do not match this task snapshot")
+                if r.get("model_id") != getattr(adapter, "model_id", "?"):
+                    raise ValueError("resume model mismatch")
+                if r.get("image_sha256") != expected[tid]["image_sha256"]:
+                    raise ValueError("resume image mismatch")
+                done[tid] = r
     thash = tasks_hash(tasks)
     pending = [t for t in tasks if t["task_id"] not in done]
     wrote = errors = retried = 0
@@ -91,8 +105,7 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
                 if wait > 0:
                     time.sleep(wait)
                 last_call[0] = time.monotonic()
-        with _fut.ThreadPoolExecutor(max_workers=1) as single:
-            return _predict_once(adapter, task, loader, timeout_s, single)
+        return _predict_once(adapter, task, loader)
 
     def cost_reached() -> bool:
         if max_cost is None or not hasattr(adapter, "estimated_cost"):
@@ -110,13 +123,15 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
         for attempt in range(retries + 1):
             try:
                 preds, info = call_limited(task)
-                usage = dict(info.get("usage") or getattr(adapter, "last_usage", None) or {})
+                usage = dict(info.get("usage") or {})
                 return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                         "tasks_hash": thash, "image_sha256": task["image_sha256"],
                         "predictions": preds, "error": None,
                         "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
                         "usage": usage,
-                        "reasoning": info.get("reasoning") or getattr(adapter, "last_reasoning", "") or ""}
+                        "status": response_status(preds, info),
+                        "finish_reason": info.get("finish_reason"),
+                        "provider": {k: v for k, v in info.items() if k != "usage"}}
             except Exception as e:  # noqa: BLE001 - per-row isolation
                 last = e
                 if _is_transient(e) and attempt < retries:
@@ -127,7 +142,7 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
                         "tasks_hash": thash, "image_sha256": task["image_sha256"],
                         "predictions": [], "error": f"{type(e).__name__}: {e}",
                         "latency_s": round(time.time() - t0, 2), "attempts": attempt + 1,
-                        "usage": dict(getattr(adapter, "last_usage", None) or {})}
+                        "usage": {}, "status": "transport_error"}
         return {"task_id": task["task_id"], "model_id": getattr(adapter, "model_id", "?"),
                 "tasks_hash": thash, "image_sha256": task["image_sha256"],
                 "predictions": [], "error": f"{type(last).__name__}: {last}",
@@ -166,7 +181,7 @@ def run_tasks(tasks: list[dict[str, Any]], adapter: Any, out_path: str | Path, *
                             break  # refill dispatch queue (budget-aware)
                         if cost_reached() and waiting:
                             stopped_early = "max_cost reached"
-                            break
+                            waiting.clear()
                 finally:
                     for f in inflight:
                         f.cancel()

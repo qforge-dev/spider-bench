@@ -31,7 +31,7 @@ def test_perfect_top1_and_constant_floor(tmp_path):
 
     perfect = [json.loads(line) for line in out.read_text().splitlines()]
     s = score(tasks, perfect)
-    assert s["top1"] == 1.0 and s["top5"] == 1.0
+    assert s["top1"] == 1.0 and "top5" not in s
     const = [json.loads(line) for line in (tmp_path / "c.jsonl").read_text().splitlines()]
     s2 = score(tasks, const)
     assert s2["top1"] == 0.5  # Aa a right, Bb b wrong
@@ -78,10 +78,10 @@ def test_collect_n_skips_known_observations():
 
         def json(self):
             return {"results": [
-                {"id": 1, "quality_grade": "research", "user": {"login": "u"},
+                {"id": 1, "quality_grade": "research", "taxon": {"name": "Aa a", "rank": "species"}, "user": {"login": "u"},
                  "photos": [{"id": 11, "license_code": "cc0",
                              "original_url": "https://static.inaturalist.org/11.jpg"}]},
-                {"id": 2, "quality_grade": "research", "user": {"login": "u"},
+                {"id": 2, "quality_grade": "research", "taxon": {"name": "Aa a", "rank": "species"}, "user": {"login": "u"},
                  "photos": [{"id": 22, "license_code": "cc0",
                              "original_url": "https://static.inaturalist.org/22.jpg"}]},
             ]}
@@ -132,7 +132,7 @@ def test_api_adapter_parses_and_tracks_cost(monkeypatch):
     from spider_bench.benchmark.api_adapter import OpenAICompatAdapter, match_candidate
 
     assert match_candidate("Araneus diadematus", ["Pisaura mirabilis", "Araneus diadematus"]) == ("Araneus diadematus", True)
-    assert match_candidate("Araneus diadematus (nice spider)", ["Araneus diadematus"])[1] is True
+    assert match_candidate("Araneus diadematus (nice spider)", ["Araneus diadematus"])[1] is False
     assert match_candidate("a mushroom", ["Araneus diadematus"])[1] is False
 
     calls = []
@@ -208,21 +208,21 @@ def test_leaderboard_sorts_by_top1(tmp_path):
     for rid, top1 in (("r-good", 0.9), ("r-bad", 0.1)):
         d = tmp_path / rid
         d.mkdir()
-        (d / "scores.json").write_text(json.dumps({"scored": 10, "top1": top1, "top5": 1.0, "errors": 0}))
-        (d / "manifest.json").write_text(json.dumps({"model_id": rid, "suite": "s"}))
+        (d / "scores.json").write_text(json.dumps({"scored": 10, "top1": top1, "execution_valid": True, "tasks_hash": "h", "errors": 0}))
+        (d / "manifest.json").write_text(json.dumps({"model_id": rid, "suite": "s", "protocol_version": 5, "status": "complete", "tasks_hash": "h"}))
     md, rows = render_leaderboard(collect_runs(tmp_path))
     assert [r["run_id"] for r in rows] == ["r-good", "r-bad"]
     assert "| 1 | r-good |" in md
 
 
-def test_match_finds_answer_buried_in_reasoning():
+def test_match_rejects_ambiguous_prose():
     from spider_bench.benchmark.api_adapter import match_candidate
 
     cands = ["Aa a", "Bb b"]
     assert match_candidate("Aa a", cands) == ("Aa a", True)
     prose = ("Small spider on a leaf, dark body. Looks like a dictynid. "
              "I conclude this is Bb b, though Aa a is similar.")
-    assert match_candidate(prose, cands) == ("Bb b", True)
+    assert match_candidate(prose, cands)[1] is False
     assert match_candidate("a mushroom", cands)[1] is False
 
 
@@ -276,7 +276,7 @@ def test_parallel_content_deterministic_and_retry(tmp_path):
                 with lock:
                     active[0] -= 1
 
-    tasks = _mini() * 2
+    tasks = [{**t, "task_id": t["task_id"] + str(i)} for i, t in enumerate(_mini() * 2)]
     out = tmp_path / "p.jsonl"
     s = run_tasks(tasks, Flaky(), out, loader=lambda t: b"x", max_workers=4,
                   retries=3, backoff_base=0.001)
@@ -304,7 +304,7 @@ def test_run_report_page(tmp_path):
     from spider_bench.benchmark.report import write_run_report
 
     tasks = _mini()
-    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": tasks_hash(tasks),
               "image_sha256": t["image_sha256"],
               "predictions": [{"taxon": t["correct_taxon"], "score": 1.0, "matched": True}],
               "error": None} for t in tasks]
@@ -323,7 +323,7 @@ def test_run_report_marks_wrong_answers_miss(tmp_path):
     from spider_bench.benchmark.report import write_run_report
 
     tasks = _mini()
-    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": tasks_hash(tasks),
               "image_sha256": t["image_sha256"],
               "predictions": [{"taxon": "Wrong name", "score": 1.0, "matched": False}],
               "error": None} for t in tasks]
@@ -332,7 +332,7 @@ def test_run_report_marks_wrong_answers_miss(tmp_path):
     (d / "predictions.jsonl").write_text("\n".join(json.dumps(p) for p in preds))
     (d / "manifest.json").write_text(json.dumps({"model_id": "m", "run_id": "r2"}))
     html = write_run_report(d, tasks).read_text()
-    assert "✓" not in html and html.count("✗") == len(tasks)
+    assert "✓" not in html and html.count("INVALID_ANSWER") == len(tasks)
 
 
 def test_run_report_header_percentages(tmp_path):
@@ -341,7 +341,7 @@ def test_run_report_header_percentages(tmp_path):
     from spider_bench.benchmark.report import write_run_report
 
     tasks = _mini()
-    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": "h",
+    preds = [{"task_id": t["task_id"], "model_id": "m", "tasks_hash": tasks_hash(tasks),
               "image_sha256": t["image_sha256"],
               "predictions": [{"taxon": t["correct_taxon"], "score": 1.0, "matched": True}],
               "error": None} for t in tasks]
@@ -414,7 +414,7 @@ def test_bedrock_adapter_converse_shape_and_usage():
                         "price_output_1k_tokens": 0.0}, client=FakeBedrock())
     preds, _ = a.predict(b"\xff\xd8\xff" + b"0" * 10,
                       {"candidates": ["Aa a", "Bb b"], "prompt": "Pick one."})
-    assert preds[0] == {"taxon": "Bb b", "score": 1.0, "matched": True, "raw": "Bb b"}
+    assert preds[0] == { "taxon": "Bb b", "matched": True, "raw": '{"species": "Bb b"}'}
     assert a.totals["input_tokens"] == 50 and a.estimated_cost() == 0.0
 
 
@@ -441,7 +441,7 @@ def test_structured_flag_gates_both_adapters(monkeypatch):
     b = OpenAICompatAdapter({**base, "structured_output": True}, post=fake_post)
     preds, _ = b.predict(b"", {"candidates": ["Aa a"]})
     assert seen["response_format"]["type"] == "json_schema"
-    assert preds[0] == {"taxon": "Aa a", "score": 1.0, "matched": True, "raw": "Aa a"}
+    assert preds[0] == { "taxon": "Aa a", "matched": True, "raw": '{"species": "Aa a"}'}
 
     class FakeBedrock:
         def converse(self, **kwargs):
@@ -570,9 +570,6 @@ def test_registry_bad_yaml_names_file(tmp_path):
     except ValueError as e:
         assert "bad.yaml" in str(e)
 
-
-def test_bedrock_answer_behind_thinking_blocks():
-    pass
 
 
 def test_reasoning_style_switch(monkeypatch):

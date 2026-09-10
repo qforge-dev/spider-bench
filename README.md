@@ -57,3 +57,10 @@ spider-bench benchmark run --model luna --max-tasks 10 --max-cost 2.0
 spider-bench benchmark score       # scores latest run
 python -m app.app                  # local search UI → http://127.0.0.1:5000
 ```
+
+## Corrected benchmark protocol
+
+Use [benchmark v5](docs/benchmark-v5.md) for fresh model comparisons. It specifies
+source validation, normalized images, deterministic shuffled 20-name shortlists,
+5,000-token limits, explicit failure accounting and the rerun commands.
+Earlier runs remain historical exploratory results.

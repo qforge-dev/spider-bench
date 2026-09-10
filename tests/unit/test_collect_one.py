@@ -21,9 +21,9 @@ class _Client:
         return _Resp({"results": self._r})
 
 
-def _obs(obs_id, grade, photos):
+def _obs(obs_id, grade, photos, name="Araneus diadematus"):
     return {"id": obs_id, "quality_grade": grade, "user": {"login": "obs"},
-            "photos": photos}
+            "photos": photos, "taxon": {"name": name, "rank": "species"}}
 
 
 def _photo(pid, lic):
@@ -49,7 +49,7 @@ def test_pick_prefers_research_grade():
 
 
 def test_pick_falls_back_and_rejects_bad_license():
-    results = [_obs(2, "needs_id", [_photo(21, "all-rights-reserved"), _photo(22, "cc-by")])]
+    results = [_obs(2, "needs_id", [_photo(21, "all-rights-reserved"), _photo(22, "cc-by")], "Pisaura mirabilis")]
     c = pick_candidate("Pisaura mirabilis", {"CC-BY-4.0"}, _Client(results), rate_limit=1000)
     assert c is not None and c.photo_id == 22 and not c.research_grade
 
@@ -57,3 +57,8 @@ def test_pick_falls_back_and_rejects_bad_license():
 def test_pick_none_when_no_photos():
     c = pick_candidate("Xyz abc", {"CC0-1.0"}, _Client([]), rate_limit=1000)
     assert c is None
+
+
+def test_pick_does_not_relabel_a_search_result():
+    obs = _obs(1, "research", [_photo(1, "cc0")], "Callobius claustrarius")
+    assert pick_candidate("Cybaeus tetricus", {"CC0-1.0"}, _Client([obs]), rate_limit=1000) is None

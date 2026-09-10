@@ -7,6 +7,7 @@ Bedrock client injectable for offline tests.
 from __future__ import annotations
 
 from typing import Any
+import threading
 
 from spider_bench.benchmark.api_adapter import match_candidate
 
@@ -31,13 +32,17 @@ class BedrockAdapter:
         self._cfg = resolved
         self._client = client  # injectable (tests); else boto3 bedrock-runtime
         self.totals = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
+        self._usage_lock = threading.Lock()
 
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
         import boto3
 
-        return boto3.client("bedrock-runtime", region_name=self._cfg.get("region", "us-east-1"))
+        from botocore.config import Config
+        return boto3.client("bedrock-runtime", region_name=self._cfg.get("region", "us-east-1"),
+                            config=Config(read_timeout=self._cfg.get("timeout_s", 180),
+                                          retries={"total_max_attempts": 1}))
 
     def estimated_cost(self) -> float:
         t = self.totals
@@ -82,15 +87,12 @@ class BedrockAdapter:
                 system=[{"text": system_text}],
                 messages=[{
                     "role": "user",
-                    "content": [
-                        {"text": user_text},
-                        {"image": {
+                    "content": [{"text": user_text}] + ([{"image": {
                             "format": _image_format(image_bytes or b""),
                             "source": {"bytes": image_bytes or b""},
-                        }},
-                    ],
+                        }}] if image_bytes else []),
                 }],
-                inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 2000)},
+                inferenceConfig={"maxTokens": self._cfg.get("max_output_tokens", 5000)},
                 **({"additionalModelRequestFields": {
                     "thinking": {"type": "adaptive"},
                     "output_config": {"effort": self._cfg["reasoning_effort"]},
@@ -102,32 +104,28 @@ class BedrockAdapter:
         blocks = resp.get("output", {}).get("message", {}).get("content", []) or []
         texts = [b.get("text", "") for b in blocks
                  if isinstance(b, dict) and b.get("text")]
-        raw_text = texts[-1] if texts else ""
+        raw_text = "".join(texts)
         try:
             text = (_json.loads(raw_text).get("species", "") or "")
         except (ValueError, AttributeError):
             text = raw_text  # schema not enforced server-side: fall back to text match
-        usage = resp.get("usage", {}) or {}
-        self.totals["requests"] += 1
-        self.totals["input_tokens"] += int(usage.get("inputTokens", 0) or 0)
-        self.totals["output_tokens"] += int(usage.get("outputTokens", 0) or 0)
-        self.totals["cached_input_tokens"] = self.totals.get("cached_input_tokens", 0) + int(
-            usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)
-        self.last_usage = {"input_tokens": int(usage.get("inputTokens", 0) or 0),
-                           "output_tokens": int(usage.get("outputTokens", 0) or 0),
-                           "cached_input_tokens": int(
-                               usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)}
-        info = {"usage": {"input_tokens": int(usage.get("inputTokens", 0) or 0),
-                          "output_tokens": int(usage.get("outputTokens", 0) or 0),
-                          "cached_input_tokens": int(
-                              usage.get("cacheReadInputTokenCount", 0) or usage.get("cacheReadInputTokens", 0) or 0)},
-                "reasoning": ""}
-        for block in resp.get("output", {}).get("message", {}).get("content", []) or []:
-            if isinstance(block, dict) and block.get("reasoningContent"):
-                rc = block["reasoningContent"]
-                info["reasoning"] = (rc.get("text", "") or "")[:8000]
-        self.last_reasoning = info["reasoning"]
+        usage = resp.get("usage") or {}
+        call_usage = {"input_tokens": int(usage.get("inputTokens", 0) or 0),
+                      "output_tokens": int(usage.get("outputTokens", 0) or 0),
+                      "cached_input_tokens": int(usage.get("cacheReadInputTokens", 0)
+                                                  or usage.get("cacheReadInputTokenCount", 0) or 0)}
+        with self._usage_lock:
+            self.totals["requests"] += 1
+            for key, value in call_usage.items():
+                self.totals[key] = self.totals.get(key, 0) + value
+        info = {"usage": call_usage, "provider_usage": usage,
+                "finish_reason": resp.get("stopReason"),
+                "response_id": (resp.get("ResponseMetadata") or {}).get("RequestId"),
+                "returned_model": self._cfg["model"], "raw_response": raw_text,
+                "provider_latency_ms": (resp.get("metrics") or {}).get("latencyMs"),
+                "reasoning": "\n".join(
+                    (b["reasoningContent"].get("reasoningText") or {}).get("text", "")
+                    or b["reasoningContent"].get("text", "")
+                    for b in blocks if isinstance(b, dict) and b.get("reasoningContent"))}
         taxon, matched = match_candidate(text, cands)
-        preds = [{"taxon": taxon, "score": 1.0 if matched else 0.0,
-                  "matched": matched, "raw": text}]
-        return (preds, info)
+        return ([{"taxon": taxon, "matched": matched, "raw": raw_text}], info)

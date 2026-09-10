@@ -5,29 +5,38 @@ import html
 from pathlib import Path
 from typing import Any
 
-from spider_bench.benchmark.scorer import is_correct
+from spider_bench.benchmark.scorer import is_correct, score
+from spider_bench.benchmark.protocol import response_status
 
 
 def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, Any]],
                       manifest: dict[str, Any],
                       family_of: dict[str, str] | None = None) -> str:
     """HTML grid: image thumb, correct vs predicted, matched flag. No deps."""
-    by_id = {t["task_id"]: t for t in tasks}
+    score(tasks, predictions)  # reject duplicate IDs or a mismatched task snapshot
+    by_pred = {p["task_id"]: p for p in predictions}
     fam = {k.lower(): v for k, v in (family_of or {}).items()}
     n = top1 = genus = family = valid = err = fam_known = 0
     cards = []
-    for p in predictions:
-        t = by_id.get(p.get("task_id", ""), {})
+    from collections import Counter
+    statuses = Counter()
+    for t in tasks:
+        p = by_pred.get(t["task_id"], {"task_id": t["task_id"], "predictions": []})
         pred = (p.get("predictions") or [{}])[0]
         guess = str(pred.get("taxon") or "")
         correct = str(t.get("correct_taxon") or "")
         n += 1
-        if p.get("error"):
-            badge, cls, err = "ERR", "miss", err + 1
+        status = response_status(p.get("predictions") or [],
+                                 {**(p.get("provider") or {}), "finish_reason": p.get("finish_reason")}, p.get("error"))
+        if t["task_id"] not in by_pred:
+            status = "missing"
+        statuses[status] += 1
+        if status != "answered":
+            badge, cls, err = status.upper(), "miss", err + 1
         else:
-            if guess:
+            if pred.get("matched", bool(guess)):
                 valid += 1
-            if pred.get("matched") and is_correct(t, guess):
+            if pred.get("matched", bool(guess)) and is_correct(t, guess):
                 badge, cls, top1 = "✓", "ok", top1 + 1
             else:
                 badge, cls = "✗", "miss"
@@ -38,7 +47,7 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
                 fam_known += 1
                 if cf == gf:
                     family += 1
-        img = t.get("image_public_url", "")
+        img = t.get("image_public_url", "") or (Path(t["image_local_path"]).as_uri() if t.get("image_local_path") else "")
         sys_txt = html.escape(str(t.get("system_prompt") or t.get("prompt") or ""))
         user_txt = html.escape(str(t.get("user_prompt") or (
             "Identify the spider in this photograph. Reply with ONLY "
@@ -65,8 +74,9 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
         f"<p>{n} samples \u00b7 cost ${manifest.get('estimated_cost_usd') or '-'} \u00b7 "
         f"tasks <code>{html.escape(str(manifest.get('tasks_hash', ''))[:12])}</code></p>"
         f"<p><strong>top-1 {pct(top1, n)}</strong> \u00b7 genus {pct(genus, n)} \u00b7 "
-        f"family {pct(family, fam_known)} <small>({fam_known} known)</small> \u00b7 "
-        f"valid names {pct(valid, n)} \u00b7 errors {err}</p>")
+        f"family {pct(family, n)} <small>(all {n} tasks; shortlist-assisted)</small> \u00b7 "
+        f"valid answers {pct(valid, n)} \u00b7 failures {err}</p>"
+        f"<p>{html.escape(str(dict(statuses)))}</p>")
     return (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1'>"
