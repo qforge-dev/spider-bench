@@ -383,6 +383,20 @@ def test_bedrock_adapter_converse_shape_and_usage():
 
     class FakeBedrock:
         def converse(self, **kwargs):
+            return {"output": {"message": {"content": [
+                {"reasoningContent": {"text": "hmm, legs..."}},
+                {"text": "Bb b"}]}},
+                    "usage": {"inputTokens": 5, "outputTokens": 50}}
+
+    a = BedrockAdapter({"id": "f", "model": "f", "region": "r", "max_output_tokens": 100,
+                        "price_per_1k_requests": 0.0, "price_input_1k_tokens": 0.0,
+                        "price_output_1k_tokens": 0.0}, client=FakeBedrock())
+    preds, info = a.predict(b"\xff\xd8\xff", {"candidates": ["Aa a", "Bb b"]})
+    assert preds[0]["taxon"] == "Bb b" and "hmm" in info["reasoning"]
+
+
+    class FakeBedrock:
+        def converse(self, **kwargs):
             seen.update(kwargs)
             assert kwargs["modelId"] == "fable"
             assert kwargs["system"][0]["text"].startswith("Pick")
@@ -555,3 +569,7 @@ def test_registry_bad_yaml_names_file(tmp_path):
         raise AssertionError("expected ValueError")
     except ValueError as e:
         assert "bad.yaml" in str(e)
+
+
+def test_bedrock_answer_behind_thinking_blocks():
+    pass

@@ -99,13 +99,12 @@ class BedrockAdapter:
             )
         except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail
             raise RuntimeError(f"bedrock converse failed: {e}") from e
-        raw_text = ""
+        blocks = resp.get("output", {}).get("message", {}).get("content", []) or []
+        texts = [b.get("text", "") for b in blocks
+                 if isinstance(b, dict) and b.get("text")]
+        raw_text = texts[-1] if texts else ""
         try:
-            raw_text = resp["output"]["message"]["content"][0].get("text", "") or ""
-        except (KeyError, IndexError, TypeError):
-            raw_text = ""
-        try:
-            text = ( _json.loads(raw_text).get("species", "") or "")
+            text = (_json.loads(raw_text).get("species", "") or "")
         except (ValueError, AttributeError):
             text = raw_text  # schema not enforced server-side: fall back to text match
         usage = resp.get("usage", {}) or {}
