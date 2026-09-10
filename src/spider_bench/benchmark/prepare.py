@@ -221,7 +221,11 @@ def prepare_suite(source: str | Path, out: str | Path,
     return manifest
 
 
-def validate_suite(directory: str | Path) -> dict:
+def validate_suite(directory: str | Path, *, cache=None, download: bool = True) -> dict:
+    from spider_bench.benchmark.suite_storage import DEFAULT_CACHE, task_asset
+
+    asset_options = {"cache": Path(cache) if cache is not None else DEFAULT_CACHE,
+                     "download": download}
     directory = Path(directory)
     manifest = json.loads((directory / "manifest.json").read_text())
     tasks = read_tasks(directory / "tasks.jsonl")
@@ -245,7 +249,7 @@ def validate_suite(directory: str | Path) -> dict:
         expected = _prompts(t["candidates"])
         if (t["system_prompt"], t["user_prompt"]) != expected:
             raise ValueError("prompt mismatch")
-        data = Path(t["image_local_path"]).read_bytes()
+        data = task_asset(t, "image", **asset_options)
         if hashlib.sha256(data).hexdigest() != t["image_sha256"] or len(data) > IMAGE_POLICY["max_bytes"]:
             raise ValueError("prepared image checksum/size mismatch")
         from PIL import Image
@@ -254,7 +258,7 @@ def validate_suite(directory: str | Path) -> dict:
             image.load()
             if image.format != "JPEG" or min(image.size) < 320 or max(image.size) > 1536 or image.getexif():
                 raise ValueError("prepared image policy violation")
-        snapshot = Path(m["source_snapshot"]).read_bytes()
+        snapshot = task_asset(t, "source", **asset_options)
         if hashlib.sha256(snapshot).hexdigest() != m["source_snapshot_sha256"]:
             raise ValueError("source snapshot checksum mismatch")
         obs = json.loads(snapshot)

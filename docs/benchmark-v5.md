@@ -109,13 +109,32 @@ with clustering by species, and repeated runs to assess generation variability.
 
 ## Commands
 
-`benchmark run` defaults to `species-id-v5` and validates its frozen `tasks.jsonl`,
-source records and images before making any model calls. An explicit `--tasks`
+`benchmark run` defaults to `species-id-v5`, restores it from S3 and validates its
+frozen `tasks.jsonl`, source records and images before making any model calls. An explicit `--tasks`
 must point to a prepared suite's `tasks.jsonl`. The legacy `run-dual` command is
 disabled because its old Latin/English suites bypassed this protocol.
 
-The prepared dataset and image/source caches live locally under gitignored `data/`;
-they are not included in the code commit. Keep those directories for new runs.
+S3 is the permanent store: `s3://spiders-dataset-088543363904/poland/benchmarks/species-id-v5/`.
+Prepared JPEGs use the existing `poland/media/sha256/` object layout. The suite includes
+portable tasks, its manifest, source task pool, exclusions, validation summary, all
+frozen observation records and downloaded originals. A SHA-256 inventory covers
+every object. Publication uses conditional writes and writes `COMPLETE` last; an
+interrupted upload cannot be used as a complete dataset.
+
+Local `data/benchmarks/species-id-v5` is a restored copy. Assets are cached by hash
+in `data/work/benchmark-s3-cache`; missing or corrupt cache files are downloaded
+again and verified. Neither the task hash nor task contents depend on local paths.
+The published task hash is `79a3edf7edd9a89676c9ff640872bbfa5d91d36a2594312d0552085967450f1e`.
+It differs from the initial local preparation hash only because storage references
+changed; images, task IDs, prompts, candidate lists and their order are identical.
+
+No manual download is needed before a normal run. `benchmark sync` restores the
+dataset explicitly; add `--archive` to download originals and excluded source
+records too. `--cache-dir` selects a different cache for `run`, `sync` or `validate`.
+`run --image-source local` and `validate --local` require an intact offline cache.
+`run --image-source none` restores the same suite but sends no image to the provider.
+The bucket's public objects can be restored without AWS credentials; writes require
+the usual AWS credentials. Publication never changes bucket permissions.
 
 From the repository root, with the normal provider credentials loaded in the shell:
 
@@ -150,11 +169,15 @@ silently overwritten. Source snapshots and downloaded originals are cached for
 reproducibility and resumable preparation:
 
 ```bash
-spider-bench benchmark prepare --out data/benchmarks/species-id-v6 --seed 43
+spider-bench benchmark prepare --out data/work/prepared/species-id-v6 --seed 43
+spider-bench benchmark publish-suite --suite species-id-v6 --directory data/work/prepared/species-id-v6 --dry-run
+spider-bench benchmark publish-suite --suite species-id-v6 --directory data/work/prepared/species-id-v6
+spider-bench benchmark sync --suite species-id-v6
 ```
 
 Run manifests are written **before** inference and pin task hashes, request
 configuration, code content hash, git state, condition and timing. Resume rejects
 changed configurations or task snapshots. Scoring and reports use each run's saved
-tasks, never a mutable global suite. Preserve the referenced local image and source
-snapshot caches with the suite when archiving or moving the experiment.
+tasks, never a mutable global suite. On another checkout, the runner restores the
+same immutable S3 suite automatically. Historical local runs keep their original
+snapshots and are not rewritten by dataset publication.

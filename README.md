@@ -7,6 +7,7 @@ Layout per country so we can expand beyond Poland:
 s3://spiders-dataset-088543363904/
   poland/raw-metadata/<source>/<snapshot>/...
   poland/media/sha256/<aa>/<bb>/<sha256>.<ext>
+  poland/benchmarks/<suite>/... # frozen tasks, source evidence, originals, inventory
   poland/work/logs/...          # optional, private operational
   poland/releases/<version>/... # immutable releases
   germany/...                   # future
@@ -14,7 +15,8 @@ s3://spiders-dataset-088543363904/
 
 Local repo holds **only code, configs, schemas, docs, tests**.
 Local machine holds a small SQLite index in `data/work/spider-bench.sqlite`
-(gitignored) with `s3_uri` links — no image bytes locally.
+(gitignored) with `s3_uri` links. Benchmark images and source evidence use a
+disposable, checksum-verified local cache; S3 holds the permanent copies.
 
 ## Quickstart
 
@@ -45,7 +47,7 @@ Danger: `danger evidence|assessments import` (validated imports), `danger audit`
 
 Release: `release build|verify|publish --version X` (deterministic Parquet + checksums, §11 gates, immutable S3 path + `COMPLETE`).
 
-Benchmark: `benchmark build-tasks` (release → tasks), `benchmark split` (gallery + disjoint query), `benchmark run --model luna` (parallel, `--max-cost`, resume), `benchmark score`, `benchmark leaderboard`, `benchmark models` (safe registry listing), `benchmark publish` (private S3 results).
+Benchmark: `benchmark prepare` (validate sources and prepare images), `benchmark publish-suite` (immutable dataset on S3), `benchmark sync` (restore dataset/cache), `benchmark run --model luna` (automatically restores v5 from S3, `--max-cost`, resume), `benchmark score`, `benchmark leaderboard`, `benchmark models` (safe registry listing), `benchmark publish` (S3 run results).
 
 ## Typical flows
 

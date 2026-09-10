@@ -198,6 +198,8 @@ def test_default_cli_validates_v5_even_when_legacy_query_exists(tmp_path, monkey
     from typer.testing import CliRunner
     from spider_bench import cli
     from spider_bench.benchmark import prepare
+    from spider_bench.benchmark import suite_storage
+    from spider_bench.config import CountryConfig
 
     monkeypatch.chdir(tmp_path)
     suite = tmp_path / "data/benchmarks/species-id-v5"
@@ -205,13 +207,17 @@ def test_default_cli_validates_v5_even_when_legacy_query_exists(tmp_path, monkey
     (suite / "query/tasks.jsonl").write_text("legacy rows")
     checked = []
 
-    def validate(directory):
+    def validate(directory, **kwargs):
         checked.append(directory.resolve())
         raise ValueError("invalid prepared data must stop the run")
 
     monkeypatch.setattr(prepare, "validate_suite", validate)
+    restored = []
+    monkeypatch.setattr(cli, "_cfg", lambda path: CountryConfig())
+    monkeypatch.setattr(suite_storage, "restore_suite", lambda directory, **kwargs: restored.append(directory.resolve()))
     result = CliRunner().invoke(cli.app, ["benchmark", "run", "--model", "perfect-reference"])
     assert checked == [suite]
+    assert restored == [suite]
     assert isinstance(result.exception, ValueError)
     assert "invalid prepared data" in str(result.exception)
     assert not (tmp_path / "data/benchmarks/runs").exists()

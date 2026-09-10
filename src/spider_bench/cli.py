@@ -1036,10 +1036,65 @@ def benchmark_prepare(
 
 
 @benchmark_app.command("validate")
-def benchmark_validate(suite: str = typer.Option("species-id-v5", "--suite")) -> None:
+def benchmark_validate(
+    suite: str = typer.Option("species-id-v5", "--suite"),
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    cache_dir: str = typer.Option("data/work/benchmark-s3-cache", "--cache-dir"),
+    local: bool = typer.Option(False, "--local", help="validate locally without accessing S3"),
+) -> None:
     """Verify task hashes, source evidence, candidate lists and every image."""
     from spider_bench.benchmark.prepare import validate_suite
-    typer.echo(json.dumps(validate_suite(Path("data/benchmarks") / suite), indent=2))
+    from spider_bench.benchmark.suite_storage import restore_suite
+    directory = Path("data/benchmarks") / suite
+    if not local:
+        cfg = _cfg(config)
+        restore_suite(directory, suite=suite, bucket=cfg.aws.bucket, prefix=cfg.aws.prefix,
+                      region=cfg.aws.region, cache=Path(cache_dir))
+    typer.echo(json.dumps(validate_suite(directory, cache=cache_dir, download=not local), indent=2))
+
+
+@benchmark_app.command("publish-suite")
+def benchmark_publish_suite(
+    suite: str = typer.Option("species-id-v5", "--suite"),
+    directory: Optional[str] = typer.Option(None, "--directory", help="local preparation directory"),
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    preparation_cache: str = typer.Option("data/work/benchmark-v5", "--preparation-cache"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Publish a complete immutable dataset, including originals and source records."""
+    from spider_bench.benchmark.suite_storage import build_publication, client_for, publish_suite
+    cfg = _cfg(config)
+    source = Path(directory) if directory else Path("data/benchmarks") / suite
+    if json.loads((source / "manifest.json").read_text())["suite"] != suite:
+        raise typer.BadParameter("suite differs from the preparation manifest")
+    plan = build_publication(source, bucket=cfg.aws.bucket,
+                             prefix=cfg.aws.prefix, region=cfg.aws.region,
+                             preparation_cache=Path(preparation_cache),
+                             staging=Path("data/work/benchmark-publications") / suite)
+    if dry_run:
+        typer.echo(json.dumps({"s3_uri": f"s3://{cfg.aws.bucket}/{plan['prefix']}",
+                               "files": len(plan["artifacts"]) + 1,
+                               "bytes": sum(v["bytes"] for v in plan["artifacts"].values())}, indent=2))
+        return
+    typer.echo(json.dumps(publish_suite(plan, bucket=cfg.aws.bucket,
+                                       s3=client_for(cfg.aws.region)), indent=2))
+
+
+@benchmark_app.command("sync")
+def benchmark_sync(
+    suite: str = typer.Option("species-id-v5", "--suite"),
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    out: Optional[str] = typer.Option(None, "--out"),
+    cache_dir: str = typer.Option("data/work/benchmark-s3-cache", "--cache-dir"),
+    archive: bool = typer.Option(False, "--archive", help="also download originals and excluded source records"),
+) -> None:
+    """Restore a completed S3 dataset and verify all required cached assets."""
+    from spider_bench.benchmark.suite_storage import restore_suite
+    cfg = _cfg(config)
+    directory = Path(out) if out else Path("data/benchmarks") / suite
+    typer.echo(json.dumps(restore_suite(directory, suite=suite, bucket=cfg.aws.bucket,
+                                        prefix=cfg.aws.prefix, region=cfg.aws.region,
+                                        cache=Path(cache_dir), archive=archive), indent=2))
 
 
 @benchmark_app.command("run")
@@ -1050,7 +1105,7 @@ def benchmark_run(
     out: Optional[str] = typer.Option(None, "--out"),
     timeout: float = typer.Option(180.0, "--timeout"),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
-    image_source: str = typer.Option("s3", "--image-source", help="s3/local: prepared bytes; none: no-image control"),
+    image_source: str = typer.Option("s3", "--image-source", help="s3: verified cache; local: offline cache; none: no-image control"),
     max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
     max_cost: Optional[float] = typer.Option(None, "--max-cost"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
@@ -1062,6 +1117,8 @@ def benchmark_run(
     sample_seed: int = typer.Option(42, "--sample-seed", help="deterministic species-stratified task order"),
     rate_limit: float = typer.Option(0.0, "--rate-limit"),
     retries: int = typer.Option(3, "--retries"),
+    config: str = typer.Option("configs/poland.yaml", "--config"),
+    cache_dir: str = typer.Option("data/work/benchmark-s3-cache", "--cache-dir"),
 ) -> None:
     """Run a validated v5 snapshot; checkpoint provenance before any requests."""
     import datetime as dt
@@ -1074,13 +1131,18 @@ def benchmark_run(
     from spider_bench.benchmark.runner import run_tasks
     from spider_bench.benchmark.tasks import read_tasks, tasks_hash
     from spider_bench.benchmark.registry import load_registry, resolve_model
+    from spider_bench.benchmark.suite_storage import restore_suite, task_asset
 
     if image_source not in {"s3", "local", "none"}:
         raise typer.BadParameter("image-source must be s3, local or none")
     tasks_path = Path(tasks) if tasks else Path("data/benchmarks") / suite / "tasks.jsonl"
     if tasks_path.name != "tasks.jsonl":
         raise typer.BadParameter("--tasks must select a prepared suite's tasks.jsonl")
-    validate_suite(tasks_path.parent)
+    if tasks is None and image_source != "local":
+        cfg = _cfg(config)
+        restore_suite(tasks_path.parent, suite=suite, bucket=cfg.aws.bucket,
+                      prefix=cfg.aws.prefix, region=cfg.aws.region, cache=Path(cache_dir))
+    validate_suite(tasks_path.parent, cache=cache_dir, download=image_source != "local")
     suite_info = json.loads((tasks_path.parent / "manifest.json").read_text())
     suite = suite_info["suite"]
     if seed is not None and seed != suite_info["seed"]:
@@ -1159,10 +1221,7 @@ def benchmark_run(
     def loader(t: dict) -> bytes:
         if condition == "no_image":
             return b""
-        data = Path(t["image_local_path"]).read_bytes()
-        if hashlib.sha256(data).hexdigest() != t["image_sha256"]:
-            raise ValueError("prepared image hash changed")
-        return data
+        return task_asset(t, "image", cache=Path(cache_dir), download=image_source != "local")
 
     def progress(done: int, total: int) -> None:
         if done % max(1, total // 30) == 0 or done == total:
