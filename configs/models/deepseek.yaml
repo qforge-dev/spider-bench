@@ -1,0 +1,30 @@
+# OpenRouter key: https://openrouter.ai/keys — export OPENROUTER_API_KEY.
+id: deepseek
+display_name: DeepSeek V4.1 Flash (OpenRouter)
+adapter: openai-compatible
+base_url: https://openrouter.ai/api/v1
+base_url_env: OPENROUTER_BASE_URL
+api_key_env: OPENROUTER_API_KEY
+model_env: DEEPSEEK_MODEL
+model: deepseek/deepseek-v4.1-flash
+structured_output: false
+max_output_tokens: 16000
+token_param: max_tokens
+# OpenRouter advertises low/high/max, with high as the default, on 2026-09-10.
+# Use --effort low or --effort high; medium is not advertised for this model.
+# The current benchmark CLI does not expose max effort.
+reasoning_effort: high
+reasoning_api: openai
+reasoning_style: nested
+# temperature omitted: provider default.
+# Prices in USD per 1k tokens, verified 2026-09-10:
+# https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints
+# OpenRouter selects the provider. Use the highest listed standard rates for
+# conservative budget estimates; the $0.15/$0.60 per 1M headline is not universal.
+price_per_1k_requests: 0.0
+price_input_1k_tokens: 0.0003
+price_cached_1k_tokens: 0.00003
+price_output_1k_tokens: 0.0012
+timeout_s: 180
+max_tasks_default: 10
+notes: "Vision via OpenRouter; use low or high effort. Automatic provider routing; cost estimates use conservative listed rates, not actual billed cost."
