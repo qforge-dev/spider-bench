@@ -40,7 +40,11 @@ def render_run_report(tasks: list[dict[str, Any]], predictions: list[dict[str, A
                     family += 1
         img = t.get("image_public_url", "")
         sys_txt = html.escape(str(t.get("system_prompt") or t.get("prompt") or ""))
-        user_txt = html.escape(str(t.get("user_prompt") or ""))
+        user_txt = html.escape(str(t.get("user_prompt") or (
+            "Identify the spider in this photograph. Reply with ONLY "
+            "<SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one scientific name "
+            "from the candidate list, and nothing outside the tags. [legacy v2 task: "
+            "user text was not stored; this is the adapter default]")))
         raw_txt = html.escape(str(pred.get("raw") or ""))
         cards.append(
             f"<div class='card {cls}'>"
