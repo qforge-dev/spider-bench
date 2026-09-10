@@ -977,7 +977,7 @@ def benchmark_run(
     max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
     max_cost: Optional[float] = typer.Option(None, "--max-cost", help="USD ceiling (API models); stops early"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
-    suite: str = typer.Option("species-id-v2", "--suite"),
+    suite: str = typer.Option("species-id-v4", "--suite"),
     concurrency: int = typer.Option(4, "--concurrency", help="parallel model requests"),
     rate_limit: float = typer.Option(0.0, "--rate-limit", help="max requests/sec total (0 = unlimited)"),
     retries: int = typer.Option(3, "--retries", help="retries on timeouts/429/5xx with backoff"),
@@ -1196,7 +1196,7 @@ def benchmark_models(
 def benchmark_score(
     tasks: Optional[str] = typer.Option(None, "--tasks"),
     predictions: Optional[str] = typer.Option(None, "--predictions"),
-    suite: str = typer.Option("species-id-v2", "--suite"),
+    suite: str = typer.Option("species-id-v4", "--suite"),
     run_id: Optional[str] = typer.Option(None, "--run-id"),
     out: Optional[str] = typer.Option(None, "--out", help="write scores.json here (default: beside predictions)"),
 ) -> None:
@@ -1250,7 +1250,7 @@ def benchmark_leaderboard(
 def benchmark_report(
     run_id: str = typer.Option(..., "--run-id"),
     tasks: Optional[str] = typer.Option(None, "--tasks"),
-    suite: str = typer.Option("species-id-v2", "--suite"),
+    suite: str = typer.Option("species-id-v4", "--suite"),
     runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
 ) -> None:
     """Per-sample report page for a run: image previews, correct vs predicted."""
