@@ -1203,6 +1203,126 @@ def benchmark_build_shortlist(
     typer.echo(f"shortlist n={n} seed={seed} tasks={len(short)} wrote={out}/tasks.jsonl")
 
 
+@benchmark_app.command("run-dual")
+def benchmark_run_dual(
+    model: str = typer.Option(..., "--model"),
+    registry: str = typer.Option("configs/models", "--registry"),
+    latin_suite: str = typer.Option("species-id-v4", "--latin-suite"),
+    english_suite: str = typer.Option("species-id-v5", "--english-suite"),
+    timeout: float = typer.Option(120.0, "--timeout"),
+    image_source: str = typer.Option("s3", "--image-source"),
+    max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
+    max_cost: Optional[float] = typer.Option(None, "--max-cost"),
+    run_id: Optional[str] = typer.Option(None, "--run-id"),
+    concurrency: int = typer.Option(4, "--concurrency"),
+    rate_limit: float = typer.Option(0.0, "--rate-limit"),
+    retries: int = typer.Option(3, "--retries"),
+) -> None:
+    """One run, two requests per sample: latin labels then english labels.
+
+    Same images, same adapter instance (shared spend tracking): latin suite
+    first, english second. Writes runs/<run-id>-latin|english + comparison.
+    """
+    import datetime as _dt
+
+    from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
+    from spider_bench.benchmark.runner import read_predictions, run_tasks
+    from spider_bench.benchmark.scorer import score
+    from spider_bench.benchmark.tasks import read_tasks
+
+    from spider_bench.benchmark.api_adapter import OpenAICompatAdapter
+    from spider_bench.benchmark.registry import load_registry, resolve_model
+
+    adapters: dict = {"perfect-reference": PerfectAdapter(),
+                      "constant-reference": ConstantAdapter()}
+    if model not in adapters:
+        reg = load_registry(registry)
+        if model not in reg:
+            raise typer.BadParameter(f"unknown model '{model}'; registry has {sorted(reg)}")
+        resolved = resolve_model(reg[model])
+        kind = resolved.get("adapter", "openai-compatible")
+        if kind == "bedrock-converse":
+            from spider_bench.benchmark.bedrock_adapter import BedrockAdapter
+
+            adapters[model] = BedrockAdapter(resolved)
+        else:
+            adapters[model] = OpenAICompatAdapter(resolved)
+    adapter = adapters[model]
+    rid = run_id or f"{model}-dual-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+    def loader(t: dict) -> bytes:
+        if image_source == "none":
+            return b""
+        import httpx
+
+        cache = Path("data/work/image-cache")
+        cache.mkdir(parents=True, exist_ok=True)
+        p = cache / f"{t['image_sha256']}.bin"
+        if p.exists():
+            return p.read_bytes()
+        url = t.get("image_public_url") or ""
+        r = httpx.get(url, timeout=60)
+        r.raise_for_status()
+        p.write_bytes(r.content)
+        return r.content
+
+    results = {}
+    for variant, suite in (("latin", latin_suite), ("english", english_suite)):
+        base = Path("data/benchmarks") / suite
+        tp = base / "tasks.jsonl"
+        if not tp.exists():
+            raise typer.BadParameter(f"suite {suite} has no tasks.jsonl (build it first)")
+        rows = read_tasks(tp)
+        if max_tasks:
+            rows = rows[:max_tasks]
+        out = Path("data/benchmarks/runs") / f"{rid}-{variant}" / "predictions.jsonl"
+        summary = run_tasks(rows, adapter, out, loader=loader, timeout_s=timeout,
+                            resume=True, max_cost=max_cost, max_workers=concurrency,
+                            rate_limit=rate_limit, retries=retries)
+        manifest = {"model_id": getattr(adapter, "model_id", model), "suite": suite,
+                    "run_id": f"{rid}-{variant}", "variant": variant,
+                    "tasks": summary["tasks"], "tasks_hash": summary["tasks_hash"],
+                    "usage": summary.get("usage", {}),
+                    "estimated_cost_usd": summary.get("estimated_cost_usd"),
+                    "errors": summary["errors"],
+                    "finished_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}
+        (out.parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        scores = score(rows, read_predictions(out))
+        (out.parent / "scores.json").write_text(json.dumps(scores, indent=2), encoding="utf-8")
+        results[variant] = {"summary": summary, "scores": scores, "rows": rows,
+                            "preds": read_predictions(out)}
+        typer.echo(f"{variant}: top1={scores.get('top1', 0):.3f} "
+                   f"errors={scores.get('errors')} cost=${summary.get('estimated_cost_usd')}",
+                   err=True)
+    # paired comparison on shared images (matched by image sha suffix)
+    lat = {p["task_id"].split(":")[-1]: p for p in results["latin"]["preds"]}
+    eng = {p["task_id"].split(":")[-1]: p for p in results["english"]["preds"]}
+    lat_tasks = {t["task_id"].split(":")[-1]: t for t in results["latin"]["rows"]}
+    eng_tasks = {t["task_id"].split(":")[-1]: t for t in results["english"]["rows"]}
+    from spider_bench.benchmark.scorer import is_correct
+
+    def _ok(pred: dict, task: dict) -> bool:
+        top = (pred.get("predictions") or [{}])[0]
+        return bool(top.get("matched")) and is_correct(task, top.get("taxon", ""))
+
+    both = lat_only = eng_only = neither = 0
+    for key, lp in lat.items():
+        if key not in eng or key not in lat_tasks or key not in eng_tasks:
+            continue
+        lok, eok = _ok(lp, lat_tasks[key]), _ok(eng[key], eng_tasks[key])
+        both += lok and eok
+        lat_only += lok and not eok
+        eng_only += (not lok) and eok
+        neither += (not lok) and (not eok)
+    comparison = {"latin_top1": results["latin"]["scores"].get("top1"),
+                  "english_top1": results["english"]["scores"].get("top1"),
+                  "paired": {"both": both, "latin_only": lat_only,
+                             "english_only": eng_only, "neither": neither}}
+    (Path("data/benchmarks/runs") / f"{rid}-english" / "comparison.json").write_text(
+        json.dumps(comparison, indent=2), encoding="utf-8")
+    typer.echo(json.dumps(comparison, indent=2))
+
+
 @benchmark_app.command("split")
 def benchmark_split(
     config: str = typer.Option("configs/poland.yaml", "--config"),
