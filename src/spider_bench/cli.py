@@ -1149,7 +1149,7 @@ def benchmark_run(
                            "image_source": image_source},
                 "adapter": {k: locals().get("resolved", {}).get(k)
                             for k in ("adapter", "model", "base_url", "temperature",
-                                      "token_param", "structured_output", "max_output_tokens")}
+                                      "token_param", "structured_output", "reasoning_effort", "max_output_tokens")}
                 if "resolved" in locals() else {"adapter": "reference"}}
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     (Path(out_path).parent / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

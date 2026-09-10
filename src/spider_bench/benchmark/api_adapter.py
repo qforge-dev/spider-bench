@@ -133,6 +133,8 @@ class OpenAICompatAdapter:
             }
         if self._cfg.get("temperature") is not None:
             body["temperature"] = self._cfg["temperature"]
+        if self._cfg.get("reasoning_effort"):
+            body["reasoning_effort"] = self._cfg["reasoning_effort"]
         body[self._cfg.get("token_param", "max_tokens") or "max_tokens"] = self._cfg["max_output_tokens"]
         headers = {"Authorization": f"Bearer {self._key()}"}
         url = self._cfg["base_url"] + "/chat/completions"
