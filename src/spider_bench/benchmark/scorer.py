@@ -61,7 +61,7 @@ def score(tasks: list[dict], predictions: list[dict], topk: tuple[int, ...] = (1
             "transport_errors": statuses["transport_error"], "status_counts": dict(statuses),
             "missing_stop_reasons": missing_stop,
             "execution_valid": bool(n) and not (statuses["missing"] or statuses["transport_error"]
-                                                  or statuses["truncated"] or missing_stop),
+                                                  or missing_stop),
             **{f"top{k}": hits[k] / n if n else 0.0 for k in topk},
             "answer_rate": statuses["answered"] / n if n else 0.0,
             "top1_answered_only": hits[1] / statuses["answered"] if statuses["answered"] else 0.0,

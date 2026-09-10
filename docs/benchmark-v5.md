@@ -72,13 +72,12 @@ Include no-image controls; do not attribute all accuracy above 5% to vision.
 
 ## Model calls and scoring
 
-All seven registered model configurations now use **16,000 completion tokens**
-as the next pilot ceiling. The initial Luna HIGH pilot hit the previous 5,000-token
-limit on 15 of its first 124 saved responses, with all 5,000 tokens used for reasoning
-and no visible answer. The completed 2,000-row MEDIUM run had no truncations.
-The new ceiling still requires a provider pilot; it is not evidence that truncation
-has been eliminated. Final comparisons should use the same declared ceiling and
-fresh run IDs. Preserve the 5,000-token runs as a separate experimental condition.
+All seven registered model configurations use a **fixed 16,000-completion-token
+ceiling**. The completed 100-row Luna HIGH pilot had 2 truncated responses,
+3 invalid answers and 16 correct answers. Average output usage, including reasoning,
+was 2,298 tokens; estimated cost was $0.2973. Remaining truncations count as failed
+answers. Keep the ceiling fixed for this experiment and do not selectively retry
+those rows. Final comparisons use the same ceiling.
 
 For Chat Completions this includes hidden reasoning and visible output; see the
 [official parameter documentation](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
@@ -106,9 +105,9 @@ denominator. The HTML family metric is explicitly shortlist-assisted. There is n
 reported top-5 because the protocol requests one answer. Answered-only accuracy
 is secondary and must not replace the primary denominator.
 
-A run is execution-valid only when complete, free of transport errors and
-truncation, and supplied with stop reasons. Completed model refusals/invalid answers
-remain measured outcomes and are counted against accuracy. The leaderboard excludes
+A run is execution-valid when complete, free of unresolved transport errors and
+supplied with stop reasons. Truncations, refusals, empty answers and invalid answers
+remain measured outcomes: they count against accuracy without disqualifying the run. The leaderboard excludes
 legacy/incomplete/invalid runs and refuses to rank different task snapshots or
 image/no-image conditions together. These technical gates do not certify label
 quality or statistical significance. Small score differences need paired analysis,

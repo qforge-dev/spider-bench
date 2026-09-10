@@ -108,7 +108,7 @@ def test_blank_at_token_limit_is_recorded_and_not_a_success(tmp_path, limit):
     assert preds[0]["provider"]["reasoning_tokens"] == limit
     result = score(rows, preds)
     assert result["status_counts"] == {"truncated": 1}
-    assert result["errors"] == 1 and not result["execution_valid"] and result["top1"] == 0
+    assert result["errors"] == 1 and result["execution_valid"] and result["top1"] == 0
 
 
 def test_exact_prepared_bytes_and_no_image_control():
