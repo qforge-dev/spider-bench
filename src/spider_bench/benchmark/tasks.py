@@ -50,10 +50,7 @@ def hard_shortlist(tasks: list[dict[str, Any]], taxinfo: dict[str, tuple[str, st
         short = sorted([correct] + picked)
         row = dict(t)
         row["candidates"] = short
-        row["system_prompt"] = t.get("prompt", "Identify the spider species in this photograph.")
-        row["user_prompt"] = ("Name this spider. Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> "
-                              f"containing exactly one of these {len(short)} names, "
-                              "and nothing outside the tags: " + "; ".join(short))
+        row["system_prompt"], row["user_prompt"] = _prompts(short)
         row["meta"] = {**(t.get("meta") or {}), "shortlist_n": len(short), "shortlist_seed": seed,
                        "shortlist_mode": "hard",
                        "n_congener": sum(1 for c in picked if c in congeners),
@@ -66,6 +63,23 @@ def hard_shortlist(tasks: list[dict[str, Any]], taxinfo: dict[str, tuple[str, st
     for t in sorted(tasks, key=lambda r: r["task_id"]):
         h.update(json.dumps(t, sort_keys=True).encode())
     return h.hexdigest()
+
+
+def _prompts(short: list[str]) -> tuple[str, str]:
+    """Protocol description (system, static) + data message (user, per task).
+
+    The candidate list travels in the user message wrapped in SPIDER_LIST
+    tags; nothing is duplicated between the two messages.
+    """
+    system = (
+        "You identify spider species from photographs. Each request gives you "
+        "a candidate list wrapped in <SPIDER_LIST>...</SPIDER_LIST> followed by "
+        "one spider photograph. Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> "
+        "containing exactly one scientific name from that list, and nothing "
+        "outside the tags.")
+    user = ("<SPIDER_LIST>\n" + "\n".join(f"- {name}" for name in short) + "\n</SPIDER_LIST>\n"
+            "Name the spider in this photograph.")
+    return system, user
 
 
 def shorten_tasks(tasks: list[dict[str, Any]], n: int, seed: int = 42,
@@ -83,10 +97,7 @@ def shorten_tasks(tasks: list[dict[str, Any]], n: int, seed: int = 42,
         short = sorted([correct] + rng.sample(pool, min(n - 1, len(pool))))
         row = dict(t)
         row["candidates"] = short
-        row["system_prompt"] = t.get("prompt", "Identify the spider species in this photograph.")
-        row["user_prompt"] = ("Name this spider. Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> "
-                              f"containing exactly one of these {len(short)} names, "
-                              "and nothing outside the tags: " + "; ".join(short))
+        row["system_prompt"], row["user_prompt"] = _prompts(short)
         row["meta"] = {**(t.get("meta") or {}), "shortlist_n": len(short), "shortlist_seed": seed,
                        "suite": suite or t.get("meta", {}).get("suite", "")}
         row["task_id"] = f"{row['meta']['suite']}:{correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
