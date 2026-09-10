@@ -1,0 +1,25 @@
+# Model registry: one file per model. Secrets ONLY via env (never committed).
+# OpenRouter key: https://openrouter.ai/keys — export OPENROUTER_API_KEY.
+id: grok
+display_name: Grok 4.6 (OpenRouter)
+adapter: openai-compatible
+base_url: https://openrouter.ai/api/v1
+base_url_env: OPENROUTER_BASE_URL
+api_key_env: OPENROUTER_API_KEY
+model_env: GROK_MODEL
+model: x-ai/grok-4.6
+# Ask the model for exactly one candidate-list name.
+max_output_tokens: 2000
+token_param: max_tokens
+# temperature + reasoning_effort omitted: provider defaults until tested
+# Pricing in USD per 1k tokens (no per-request fee).
+# Source: OpenRouter screenshot, 2026-09-10 (SpaceXAI ZDR: $2/$6/1M in/out,
+# cache read $0.50/1M). Used ONLY for --max-cost guards.
+price_per_1k_requests: 0.0
+price_input_1k_tokens: 0.002
+price_cached_1k_tokens: 0.0005
+price_output_1k_tokens: 0.006
+# Runner limits.
+timeout_s: 180
+max_tasks_default: 10
+notes: Pricing 2026-09-10, verify on OpenRouter before big runs.
