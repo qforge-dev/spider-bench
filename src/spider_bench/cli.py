@@ -1069,6 +1069,29 @@ def benchmark_run(
     typer.echo(json.dumps(summary, indent=2))
 
 
+@benchmark_app.command("build-shortlist")
+def benchmark_build_shortlist(
+    from_suite: str = typer.Option("species-id-v2", "--from-suite"),
+    part: str = typer.Option("query", "--part", help="query or gallery"),
+    n: int = typer.Option(20, "--n", help="shortlist size incl. correct answer"),
+    seed: int = typer.Option(42, "--seed"),
+    suite: str = typer.Option("species-id-v3", "--suite"),
+) -> None:
+    """Seeded 20-name shortlists: same seed + tasks -> identical rows for every model."""
+    from spider_bench.benchmark.tasks import read_tasks, shorten_tasks, write_tasks
+
+    src = Path("data/benchmarks") / from_suite / part / "tasks.jsonl"
+    tasks = read_tasks(src)
+    short = shorten_tasks(tasks, n, seed, suite=suite)
+    out = Path("data/benchmarks") / suite
+    write_tasks(short, out / "query", dataset_version=f"{from_suite}/{part}",
+                dataset_checksums={"shortlist": f"n={n} seed={seed}"})
+    (out / "query" / "tasks.jsonl").rename(out / "tasks.jsonl")
+    (out / "query" / "manifest.json").rename(out / "manifest.json")
+    (out / "query").rmdir()
+    typer.echo(f"shortlist n={n} seed={seed} tasks={len(short)} wrote={out}/tasks.jsonl")
+
+
 @benchmark_app.command("split")
 def benchmark_split(
     config: str = typer.Option("configs/poland.yaml", "--config"),

@@ -51,11 +51,13 @@ class BedrockAdapter:
 
     def predict(self, image_bytes: bytes, context: dict[str, Any]) -> list[dict[str, Any]]:
         cands = context.get("candidates", [])
-        system_text = ((context.get("prompt") or "Identify the spider species in this photograph.")
-                       + f" Valid answers ({len(cands)}): " + "; ".join(cands))
-        user_text = ("Identify the spider in this photograph. "
-                     "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
-                     "scientific name from the candidate list, and nothing outside the tags.")
+        system_text = context.get("system_prompt") or (
+            (context.get("prompt") or "Identify the spider species in this photograph.")
+            + f" Valid answers ({len(cands)}): " + "; ".join(cands))
+        user_text = context.get("user_prompt") or (
+            "Identify the spider in this photograph. "
+            "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
+            "scientific name from the candidate list, and nothing outside the tags.")
         schema = {
             "type": "object",
             "properties": {"species": {

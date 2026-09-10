@@ -11,6 +11,8 @@
     "image_s3_uri": {"type": "string", "pattern": "^s3://"},
     "image_public_url": {"type": "string"},
     "prompt": {"type": "string"},
+    "system_prompt": {"type": "string"},
+    "user_prompt": {"type": "string"},
     "candidates": {"type": "array", "items": {"type": "string"}},
     "correct_taxon": {"type": "string"},
     "synonyms_accepted": {"type": "array", "items": {"type": "string"}, "default": []},

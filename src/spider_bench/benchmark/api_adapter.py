@@ -78,7 +78,9 @@ class OpenAICompatAdapter:
                 + t["output_tokens"] / 1000 * self._cfg["price_output_1k_tokens"])
 
     def _system_prompt(self, context: dict[str, Any]) -> str:
-        """Static across all tasks: instruction + full candidate list (cacheable prefix)."""
+        """Task-defined system text when present, else legacy full-list prompt."""
+        if context.get("system_prompt"):
+            return context["system_prompt"]
         cands = context.get("candidates", [])
         return ((context.get("prompt") or "Identify the spider species in this photograph.")
                 + f" Valid answers ({len(cands)}): " + "; ".join(cands))
@@ -96,9 +98,10 @@ class OpenAICompatAdapter:
         # Static system message first: identical across tasks, so providers
         # cache it (candidate list ~5k tokens). Per-image content stays in user.
         system_text = self._system_prompt(context)
-        user_text = ("Identify the spider in this photograph. "
-                     "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
-                     "scientific name from the candidate list, and nothing outside the tags.")
+        user_text = context.get("user_prompt") or (
+            "Identify the spider in this photograph. "
+            "Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> containing exactly one "
+            "scientific name from the candidate list, and nothing outside the tags.")
         if context.get("image_public_url"):
             user_content: list[dict[str, Any]] = [
                 {"type": "text", "text": user_text},

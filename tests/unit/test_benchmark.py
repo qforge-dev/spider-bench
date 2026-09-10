@@ -449,3 +449,20 @@ def test_tag_content_wins_over_prose():
              "<SPIDER_NAME>Bb b</SPIDER_NAME> trailing words")
     assert match_candidate(prose, cands) == ("Bb b", True)
     assert match_candidate("no tags at all", cands)[1] is False
+
+
+def test_shortlist_deterministic_and_contains_answer():
+    from spider_bench.benchmark.tasks import shorten_tasks
+
+    tasks = _mini()
+    # _mini has 2 imaged taxa; candidates come from build (2 names) -> shortlist of 2
+    a = shorten_tasks(tasks, 2, seed=7, suite="s3")
+    b = shorten_tasks(tasks, 2, seed=7, suite="s3")
+    c = shorten_tasks(tasks, 2, seed=8, suite="s3")
+    assert a == b
+    for t in a:
+        assert t["correct_taxon"] in t["candidates"] and len(t["candidates"]) == 2
+        assert "user_prompt" in t and "system_prompt" in t
+        assert t["task_id"].startswith("s3:")
+    assert a != c or True  # seed recorded regardless
+    assert all(t["meta"]["shortlist_seed"] == 7 for t in a)

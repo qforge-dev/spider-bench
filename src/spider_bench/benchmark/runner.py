@@ -38,7 +38,9 @@ def _load_image_bytes(task: dict[str, Any], loader: Callable[[dict[str, Any]], b
 
 def _context(t: dict[str, Any]) -> dict[str, Any]:
     return {"candidates": t.get("candidates", []), "correct_taxon": t.get("correct_taxon", ""),
-            "prompt": t.get("prompt", ""), "image_public_url": t.get("image_public_url", ""),
+            "prompt": t.get("prompt", ""), "system_prompt": t.get("system_prompt", ""),
+            "user_prompt": t.get("user_prompt", ""),
+            "image_public_url": t.get("image_public_url", ""),
             "task_id": t.get("task_id", "")}
 
 

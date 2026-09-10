@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,36 @@ def _sha256_of_bytes(b: bytes) -> str:
 
 
 def tasks_hash(tasks: list[dict[str, Any]]) -> str:
+    h = hashlib.sha256()
+    for t in sorted(tasks, key=lambda r: r["task_id"]):
+        h.update(json.dumps(t, sort_keys=True).encode())
+    return h.hexdigest()
+
+
+def shorten_tasks(tasks: list[dict[str, Any]], n: int, seed: int = 42,
+                  suite: str | None = None) -> list[dict[str, Any]]:
+    """Seeded per-task shortlists: correct + (n-1) distractors, deterministic.
+
+    Same seed + same input tasks -> identical rows for every model. The full
+    gallery stays in meta for audit; scoring uses the shortlist.
+    """
+    out = []
+    for t in sorted(tasks, key=lambda r: r["task_id"]):
+        correct = t["correct_taxon"]
+        pool = sorted({c for c in t.get("candidates", []) if c != correct})
+        rng = random.Random(f"{seed}:{t['task_id']}")
+        short = sorted([correct] + rng.sample(pool, min(n - 1, len(pool))))
+        row = dict(t)
+        row["candidates"] = short
+        row["system_prompt"] = t.get("prompt", "Identify the spider species in this photograph.")
+        row["user_prompt"] = ("Name this spider. Reply with ONLY <SPIDER_NAME>NAME</SPIDER_NAME> "
+                              f"containing exactly one of these {len(short)} names, "
+                              "and nothing outside the tags: " + "; ".join(short))
+        row["meta"] = {**(t.get("meta") or {}), "shortlist_n": len(short), "shortlist_seed": seed,
+                       "suite": suite or t.get("meta", {}).get("suite", "")}
+        row["task_id"] = f"{row['meta']['suite']}:{correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
+        out.append(row)
+    return sorted(out, key=lambda r: r["task_id"])
     h = hashlib.sha256()
     for t in sorted(tasks, key=lambda r: r["task_id"]):
         h.update(json.dumps(t, sort_keys=True).encode())
