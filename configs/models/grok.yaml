@@ -11,7 +11,8 @@ model: x-ai/grok-4.6
 # Ask the model for exactly one candidate-list name.
 max_output_tokens: 2000
 token_param: max_tokens
-# temperature + reasoning_effort omitted: provider defaults until tested
+reasoning_effort: medium
+# temperature omitted: provider default until tested
 # Pricing in USD per 1k tokens (no per-request fee).
 # Source: OpenRouter screenshot, 2026-09-10 (SpaceXAI ZDR: $2/$6/1M in/out,
 # cache read $0.50/1M). Used ONLY for --max-cost guards.
