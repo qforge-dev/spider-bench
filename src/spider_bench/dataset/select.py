@@ -1,4 +1,4 @@
-"""Media selection for a release (plan §10C).
+"""Media selection for a release.
 
 Filters discovery candidates by license profile, then applies deterministic
 per-taxon / per-observation / per-observer caps so one source cannot dominate.

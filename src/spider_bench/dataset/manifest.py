@@ -1,4 +1,4 @@
-"""Release manifest builder (plan §3, §9, §10G).
+"""Release manifest builder.
 
 Builds deterministic Parquet artifacts + release.json + checksums.sha256 in a
 local staging directory. Rebuilding from identical inputs produces identical

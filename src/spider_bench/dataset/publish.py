@@ -1,4 +1,4 @@
-"""S3 release publishing (plan §9, §10G, §11).
+"""S3 release publishing.
 
 Flow: local staging dir (built by manifest.build_release) -> verify gates ->
 upload to temp S3 staging prefix -> copy to ``poland/releases/<version>/`` ->
@@ -7,8 +7,6 @@ write ``COMPLETE`` last. Never mutate a completed release.
 from __future__ import annotations
 
 import json
-import shutil
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -287,12 +285,3 @@ def publish_release(
         final_keys = [final_prefix + k[len(staging_prefix):] for k in keys]
 
     return {"keys": sorted(final_keys), "complete_key": complete_key, "dry_run": dry_run}
-
-
-def build_to_temp_and_publish(*args: Any, **kwargs: Any) -> dict[str, Any]:
-    """Copy a built release dir to a temp sibling, verify, publish (atomic-ish local step)."""
-    src = Path(kwargs.pop("src_dir"))
-    tmp = Path(tempfile.mkdtemp(prefix="release-"))
-    sibling = tmp / src.name
-    shutil.copytree(src, sibling)
-    return publish_release(sibling, *args, **kwargs)

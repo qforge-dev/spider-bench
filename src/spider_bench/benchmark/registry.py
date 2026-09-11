@@ -1,4 +1,4 @@
-"""Model registry (M3): configs/models/*.yaml. Secrets via env, never logged."""
+"""Model registry: configs/models/*.yaml. Secrets via env, never logged."""
 from __future__ import annotations
 
 import os

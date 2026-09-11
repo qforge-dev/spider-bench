@@ -1,4 +1,4 @@
-"""Task builder (M0): release -> deterministic tasks.jsonl + manifest.
+"""Task builder: release -> deterministic tasks.jsonl + manifest.
 
 Closed-set species ID v1: one task per imaged taxon, candidates = full
 checklist (or imaged subset). Manifest records the dataset version,
@@ -11,10 +11,6 @@ import json
 import random
 from pathlib import Path
 from typing import Any
-
-
-def _sha256_of_bytes(b: bytes) -> str:
-    return hashlib.sha256(b).hexdigest()
 
 
 def tasks_hash(tasks: list[dict[str, Any]]) -> str:
@@ -59,10 +55,6 @@ def hard_shortlist(tasks: list[dict[str, Any]], taxinfo: dict[str, tuple[str, st
         row["task_id"] = f"{row['meta']['suite']}:{correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
         out.append(row)
     return sorted(out, key=lambda r: r["task_id"])
-    h = hashlib.sha256()
-    for t in sorted(tasks, key=lambda r: r["task_id"]):
-        h.update(json.dumps(t, sort_keys=True).encode())
-    return h.hexdigest()
 
 
 def _prompts(short: list[str]) -> tuple[str, str]:
@@ -103,10 +95,6 @@ def shorten_tasks(tasks: list[dict[str, Any]], n: int, seed: int = 42,
         row["task_id"] = f"{row['meta']['suite']}:{correct.replace(' ', '_')}:{t['image_sha256'][:12]}"
         out.append(row)
     return sorted(out, key=lambda r: r["task_id"])
-    h = hashlib.sha256()
-    for t in sorted(tasks, key=lambda r: r["task_id"]):
-        h.update(json.dumps(t, sort_keys=True).encode())
-    return h.hexdigest()
 
 
 def build_tasks(taxa: list[dict[str, Any]], media: list[dict[str, Any]],

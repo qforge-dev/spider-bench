@@ -5,10 +5,7 @@ No network, no boto3.
 """
 from __future__ import annotations
 
-import csv
-import json
 import sqlite3
-from pathlib import Path
 from typing import Any
 
 from spider_bench.taxonomy.normalize import (
@@ -53,18 +50,6 @@ def parse_wsc_rows(rows: list[dict[str, Any]], snapshot_id: str) -> list[dict[st
             }
         )
     return out
-
-
-def load_wsc_file(path: str | Path) -> list[dict[str, Any]]:
-    """Load a CSV or JSON WSC snapshot file. Pure file read, no network."""
-    p = Path(path)
-    if p.suffix.lower() == ".json":
-        data = json.loads(p.read_text())
-        if isinstance(data, dict) and "taxa" in data:
-            data = data["taxa"]
-        return list(data)
-    with p.open(newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
 
 
 def ingest_wsc(
@@ -167,10 +152,3 @@ def ingest_wsc(
                 )
                 n_names += 1
     return {"taxa": n_taxa, "names": n_names}
-
-
-def ingest_wsc_file(
-    conn: sqlite3.Connection, path: str | Path, *, snapshot_id: str
-) -> dict[str, int]:
-    """Load a CSV/JSON snapshot file and ingest it. Thin I/O wrapper."""
-    return ingest_wsc(conn, load_wsc_file(path), snapshot_id=snapshot_id)

@@ -1,4 +1,4 @@
-"""CLI: composable, idempotent, S3-native (plan §6)."""
+"""CLI: composable, idempotent, S3-native."""
 from __future__ import annotations
 
 import json
@@ -486,14 +486,6 @@ def audit_licenses(
     typer.echo(f"profile={profile} counts={dict(counts)} dry_run={dry_run} n={len(rows)}")
 
 
-@audit_app.command("taxonomy")
-def audit_taxonomy(
-    config: str = typer.Option("configs/poland.yaml", "--config"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    typer.echo(f"audit taxonomy dry_run={dry_run} (delegated to taxonomy worker).")
-
-
 # ---- media ----
 
 @media_app.command("select")
@@ -822,39 +814,7 @@ def media_upgrade_urls(
     conn.close()
 
 
-@media_app.command("download")
-def media_download(
-    config: str = typer.Option("configs/poland.yaml", "--config"),
-    input: Optional[str] = typer.Option(None, "--input"),
-    resume: bool = typer.Option(True, "--resume"),
-    max_records: int = typer.Option(1000, "--max-records"),
-    concurrency: int = typer.Option(4, "--concurrency"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    typer.echo(
-        f"media download input={input} resume={resume} max_records={max_records} "
-        f"concurrency={concurrency} dry_run={dry_run} (media worker module)"
-    )
-
-
-@media_app.command("validate")
-def media_validate(
-    config: str = typer.Option("configs/poland.yaml", "--config"),
-    input: Optional[str] = typer.Option(None, "--input"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    typer.echo(f"media validate input={input} dry_run={dry_run} (media worker module)")
-
-
-@media_app.command("deduplicate")
-def media_deduplicate(
-    config: str = typer.Option("configs/poland.yaml", "--config"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    typer.echo(f"media deduplicate dry_run={dry_run} (media worker module)")
-
-
-# ---- danger (owned here) ----
+# ---- danger ----
 
 @danger_app.command("evidence")
 def danger_evidence(
@@ -904,7 +864,7 @@ def danger_audit(
         raise typer.Exit(1)
 
 
-# ---- release (owned here) ----
+# ---- release ----
 
 @release_app.command("build")
 def release_build(
@@ -959,7 +919,7 @@ def release_verify(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     strict_reports: bool = typer.Option(False, "--strict-reports"),
 ) -> None:
-    """Run §11 gates against a built release directory."""
+    """Validate a built release directory."""
     from spider_bench.dataset.publish import verify_release
 
     target = dir or f"data/releases/polish-spiders/{version}"
@@ -990,7 +950,7 @@ def release_publish(
     typer.echo(f"published {result['complete_key']} keys={len(result['keys'])} dry_run={dry_run}")
 
 
-# ---- benchmark (M0 tasks + M1 adapter/runner/scorer) ----
+# ---- benchmark ----
 
 @benchmark_app.command("build-tasks")
 def benchmark_build_tasks(
@@ -1311,28 +1271,6 @@ def benchmark_build_shortlist(
     (out / "query" / "manifest.json").rename(out / "manifest.json")
     (out / "query").rmdir()
     typer.echo(f"shortlist n={n} seed={seed} tasks={len(short)} wrote={out}/tasks.jsonl")
-
-
-@benchmark_app.command("run-dual")
-def benchmark_run_dual(
-    model: str = typer.Option(..., "--model"),
-    registry: str = typer.Option("configs/models", "--registry"),
-    latin_suite: str = typer.Option("species-id-v4", "--latin-suite"),
-    english_suite: str = typer.Option("species-id-v5", "--english-suite"),
-    timeout: float = typer.Option(120.0, "--timeout"),
-    image_source: str = typer.Option("s3", "--image-source"),
-    max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
-    max_cost: Optional[float] = typer.Option(None, "--max-cost"),
-    run_id: Optional[str] = typer.Option(None, "--run-id"),
-    concurrency: int = typer.Option(4, "--concurrency"),
-    rate_limit: float = typer.Option(0.0, "--rate-limit"),
-    retries: int = typer.Option(3, "--retries"),
-) -> None:
-    """Disabled legacy Latin/English runner; use the validated benchmark run command."""
-    raise typer.BadParameter(
-        "run-dual uses an obsolete protocol and is disabled. "
-        "Use benchmark run with a prepared suite (default: species-id-v5)."
-    )
 
 
 @benchmark_app.command("split")

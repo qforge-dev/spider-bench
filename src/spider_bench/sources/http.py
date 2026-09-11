@@ -9,14 +9,14 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, TypeVar
+from typing import Any, TypeVar
 
 import httpx
 
 T = TypeVar("T")
 
 # Wikimedia-family APIs reject generic/bot-like User-Agents (HTTP 403).
-# Keep this descriptive; override via SPIDER_BENCH_UA (see docs/local-operations.md).
+# Keep this descriptive; override via SPIDER_BENCH_UA.
 DEFAULT_USER_AGENT = os.environ.get(
     "SPIDER_BENCH_UA",
     "spider-bench/0.2 (Polish spider image dataset; "
@@ -160,27 +160,6 @@ async def fetch_json_async(
         async with semaphore:
             return await _do()
     return await _do()
-
-
-async def gather_bounded(
-    coros: list[Awaitable[T]],
-    *,
-    concurrency: int = 4,
-    dry_run: bool = False,
-    max_records: int | None = None,
-) -> list[T]:
-    """Run coroutines with bounded concurrency. No-op ([]) when dry_run=True."""
-    if dry_run:
-        return []
-    if max_records is not None:
-        coros = coros[:max_records]
-    sem = asyncio.Semaphore(max(1, concurrency))
-
-    async def _wrap(c: Awaitable[T]) -> T:
-        async with sem:
-            return await c
-
-    return list(await asyncio.gather(*[_wrap(c) for c in coros]))
 
 
 def apply_record_cap(items: list[T], max_records: int) -> list[T]:

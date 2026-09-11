@@ -1,11 +1,10 @@
-"""Review events, adjudication, status transitions (plan §8, §10F).
+"""Review events, adjudication, status transitions.
 
 Reviewed taxonomy / danger records are never overwritten silently: changes go
 through a new version plus an appended review event.
 """
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -121,40 +120,3 @@ def adjudicate(
     if relevant:
         return "in_review"
     return "draft"
-
-
-REVIEW_EVENTS_DDL = """
-CREATE TABLE IF NOT EXISTS review_events (
-  id INTEGER PRIMARY KEY,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  reviewer TEXT NOT NULL,
-  timestamp TEXT NOT NULL,
-  decision TEXT NOT NULL,
-  notes TEXT NOT NULL DEFAULT '',
-  previous_status TEXT NOT NULL DEFAULT '',
-  new_status TEXT NOT NULL DEFAULT ''
-);
-"""
-
-
-def record_review_event_sqlite(conn: sqlite3.Connection, event: ReviewEvent) -> int:
-    """Persist one review event; returns row id. Creates table if missing."""
-    conn.execute(REVIEW_EVENTS_DDL)
-    cur = conn.execute(
-        "INSERT INTO review_events "
-        "(entity_type, entity_id, reviewer, timestamp, decision, notes, "
-        " previous_status, new_status) VALUES (?,?,?,?,?,?,?,?)",
-        (
-            event.entity_type,
-            event.entity_id,
-            event.reviewer,
-            event.timestamp,
-            event.decision,
-            event.notes,
-            event.previous_status,
-            event.new_status,
-        ),
-    )
-    conn.commit()
-    return int(cur.lastrowid)

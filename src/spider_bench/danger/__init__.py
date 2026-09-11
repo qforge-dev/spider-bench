@@ -1,7 +1,7 @@
 """Danger (medical-significance) assessments: evidence-backed, Poland-scoped.
 
 Never infer danger from venom presence, size/appearance, common names,
-anecdotes, unverified occurrences, or model output (plan §2.2).
+anecdotes, unverified occurrences, or model output.
 Missing evidence must stay ``uncertain``/unreviewed — never ``none_known``.
 """
 

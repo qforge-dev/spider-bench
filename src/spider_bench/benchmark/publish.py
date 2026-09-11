@@ -1,4 +1,4 @@
-"""Results publisher (M2): run dir -> private S3 results prefix, COMPLETE last."""
+"""Results publisher: run dir -> private S3 results prefix, COMPLETE last."""
 from __future__ import annotations
 
 from pathlib import Path

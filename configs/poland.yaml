@@ -20,5 +20,4 @@ collection:
   rate_limit_per_sec: 2.0
 
 sources:
-  primary_checklist: null  # TODO Milestone 0 decision
   taxonomy_snapshot: null  # pinned WSC snapshot id

@@ -125,15 +125,6 @@ def enqueue(conn: sqlite3.Connection, items: list[DownloadItem]) -> int:
     return n
 
 
-def fetch_pending(conn: sqlite3.Connection, limit: int = 100) -> list[str]:
-    ensure_queue_table(conn)
-    rows = conn.execute(
-        "SELECT url FROM download_queue WHERE status IN ('pending','retry') ORDER BY url LIMIT ?",
-        (limit,),
-    ).fetchall()
-    return [r[0] for r in rows]
-
-
 def mark_done(conn: sqlite3.Connection, url: str, sha256: str, s3_key: str) -> None:
     ensure_queue_table(conn)
     with conn:

@@ -233,12 +233,3 @@ def test_cli_rejects_unvalidated_sibling_tasks(tmp_path):
     result = CliRunner().invoke(app, ["benchmark", "run", "--tasks", str(unvalidated)])
     assert result.exit_code == 2
     assert "prepared suite's tasks.jsonl" in result.output
-
-
-def test_legacy_dual_runner_cannot_start_provider_calls():
-    from typer.testing import CliRunner
-    from spider_bench.cli import app
-
-    result = CliRunner().invoke(app, ["benchmark", "run-dual", "--model", "missing-provider"])
-    assert result.exit_code == 2
-    assert "obsolete protocol" in result.output

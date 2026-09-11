@@ -1,4 +1,4 @@
-"""Bibliographic evidence import + claim linkage (plan §4.6, §10F).
+"""Bibliographic evidence import + claim linkage.
 
 Each danger assessment must cite evidence sources with enough metadata to
 locate the claim: DOI, PMID, ISBN, or stable URL when available. A citation
@@ -104,7 +104,7 @@ def validate_source(raw: dict[str, Any]) -> EvidenceSource:
     if not any([src.doi, src.pmid, src.isbn, src.url]):
         raise ValueError(
             f"evidence source {src.id!r}: need at least one of doi/pmid/isbn/url "
-            "to locate the claim (plan §4.6)"
+            "to locate the claim"
         )
     if src.doi and not DOI_RE.match(src.doi):
         raise ValueError(f"evidence source {src.id!r}: malformed DOI: {src.doi!r}")

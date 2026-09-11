@@ -1,9 +1,0 @@
-body{font-family:system-ui,sans-serif;margin:0 auto;max-width:1100px;padding:16px}
-header h1 small{color:#666;font-weight:normal}
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.filters input,.filters select{padding:6px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
-.card{border:1px solid #ddd;border-radius:8px;overflow:hidden;text-decoration:none;color:inherit}
-.card img{width:100%;height:140px;object-fit:cover;display:block}
-.noimg{height:140px;display:flex;align-items:center;justify-content:center;background:#f3f3f3;color:#888}
-.meta{padding:8px}.meta span{display:block;color:#666;font-size:13px}

@@ -2,15 +2,13 @@
 
 # Spider Bench
 
-**2,000 photos · 671 species and subspecies · 9 models · 16 runs**
+**2,000 photos · 671 species and subspecies**
 
 How well can AI tell spiders apart? This repository contains the frozen tasks, model answers, scores, and Python CLI behind the experiment. Every model sees the same photos and the same 20 possible names. The best run got **49.85%** right.
 
 [Read the story](https://kielbasa.dev/blog/how-well-can-ai-identify-spiders) · [Run it yourself](src/spider_bench/README.md) · [Full leaderboard](data/benchmarks/leaderboard.md) · [Benchmark protocol](docs/benchmark-v5.md)
 
 ## Who knew the spiders?
-
-All **16 runs** from the current leaderboard are shown, including runs with failures. Medium and high are the configured reasoning-effort settings; they do not imply equal compute across providers.
 
 <picture>
   <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/assets/readme/accuracy-dark-mobile.svg">
@@ -19,7 +17,7 @@ All **16 runs** from the current leaderboard are shown, including runs with fail
   <img src="docs/assets/readme/accuracy-light.svg" alt="Exact-species accuracy for all 16 runs. Gemini 3.8 Flash high leads at 49.85%; the full values and run files are in the table below." width="900">
 </picture>
 
-Accuracy uses **all 2,000 assigned photos** as the denominator. Failed or missing answers count as incorrect. These are descriptive results on this task snapshot; small differences do not establish statistical significance.
+Accuracy is **correct species / 2,000 photos**. Failed and missing answers count as incorrect.
 
 <details>
 <summary>Every score, cost, and run file</summary>
@@ -45,13 +43,11 @@ Accuracy uses **all 2,000 assigned photos** as the denominator. Failed or missin
 | GPT-5.6 Luna | high | 21.50% | 430 | 45 | $4.99 | [Run](data/benchmarks/runs/luna-20260910-190742) |
 <!-- results:end -->
 
-Costs are estimates from recorded usage and configured prices, not billing statements. Muse Spark 1.3 uses discounted Contributor pricing, which allows provider training and data use. The starred labels in the charts refer to that pricing tier.
-
 </details>
 
 ## What did those answers cost?
 
-More spending did not reliably buy more correct answers. Across the recorded runs, estimated cost ranges from **$0.79 to $97.53** for the same 2,000-photo task set. The dollar axis is logarithmic, so equal spacing represents equal cost ratios.
+Estimated cost per 2,000-photo run: **$0.79–$97.53**. The dollar axis is logarithmic.
 
 <picture>
   <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/assets/readme/cost-dark-mobile.svg">
@@ -60,11 +56,11 @@ More spending did not reliably buy more correct answers. Across the recorded run
   <img src="docs/assets/readme/cost-light.svg" alt="Estimated cost of all 16 runs in the same order as the accuracy chart. Muse Spark 1.3 medium costs $0.79; GPT-6 Astra high costs $97.53." width="900">
 </picture>
 
-*Muse Spark 1.3 uses Contributor pricing. See the exact-results table above for costs and failures.*
+*Muse Spark 1.3 uses discounted Contributor pricing, with provider training and data use enabled.*
 
 ## How wrong is wrong?
 
-An incorrect species can still belong to the right genus or family. Each bar below shows all 2,000 tasks, split into mutually exclusive categories. “Same family” means the right family but a different genus; “No valid answer” includes failed and missing responses.
+Each bar covers all 2,000 photos. “Same family” excludes same-genus answers; “No valid answer” includes failed and missing responses.
 
 <picture>
   <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="docs/assets/readme/mistakes-dark-mobile.svg">
@@ -77,22 +73,18 @@ An incorrect species can still belong to the right genus or family. Each bar bel
 
 ## Run it yourself
 
-Python **3.12+** is required. From a fresh checkout:
+Python **3.12+**.
 
 ```bash
 git clone https://github.com/qforge-dev/spider-bench.git
 cd spider-bench
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e .
 spider-bench benchmark models
 ```
 
-Then [configure your provider and start with a 10-photo pilot](src/spider_bench/README.md#start-with-a-pilot). The CLI restores and verifies the public dataset automatically; model inference uses your own provider credentials and incurs provider charges.
-
-To reproduce this comparison, follow the [2,000-photo setup](src/spider_bench/README.md#reproduce-the-published-2000-photo-setup). Keep the same task count and hash, seeds, image condition, and 16,000-token completion ceiling. The full v5 suite has 2,183 photos, so omitting `--max-tasks 2000` changes the comparison.
-
-See the [detailed benchmark README](src/spider_bench/README.md) for setup, scoring, and result files.
+[Provider setup and pilot run](src/spider_bench/README.md#start-with-a-pilot) · [Reproduce the 2,000-photo comparison](src/spider_bench/README.md#reproduce-the-published-2000-photo-setup) · [CLI guide](src/spider_bench/README.md)
 
 ---
 

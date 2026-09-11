@@ -1,19 +1,11 @@
-"""Model adapter interface (M1): the only thing model-side code writes.
+"""Offline reference adapters for validating benchmark execution.
 
 predict(image_bytes, context) -> ranked [{"taxon": str, "score": float}].
 Rank order counts, scores optional. Includes offline reference adapters.
 """
 from __future__ import annotations
 
-from typing import Any, Protocol
-
-
-class ModelAdapter(Protocol):
-    model_id: str
-
-    def predict(self, image_bytes: bytes, context: dict[str, Any]) -> list[dict[str, Any]]:
-        """Return ranked predictions, best first. Must not raise on odd input."""
-        ...
+from typing import Any
 
 
 class PerfectAdapter:

@@ -2,22 +2,18 @@
 
 [Back to repository](../../README.md)
 
-Spider Bench is a Python CLI for running and scoring spider
-identification benchmarks. Run the commands below **from the repository root**,
-not from this package directory. Python **3.12 or newer** is required.
+Python **3.12+**. Run these commands **from the repository root**.
 
 ## Install and choose a model
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e .
 spider-bench benchmark models
 ```
 
-Model settings live in [configs/models](../../configs/models). Credentials come
-from the environment; the registry listing reports whether they are present
-without printing their values.
+Model settings live in [configs/models](../../configs/models). Export the matching credentials before running.
 
 | CLI model ID | Credentials | Optional overrides |
 | :--- | :--- | :--- |
@@ -27,12 +23,10 @@ without printing their values.
 | `fable` | Standard AWS credential chain: environment, profile, SSO, or IAM role | `FABLE_REGION`, `FABLE_MODEL` |
 
 Azure configs point to the original experiment's resource. Set the matching
-`*_BASE_URL` and `*_MODEL` for your own Azure resource and deployment. Choose a
-model whose account access is already configured. Muse's Contributor tier also
+`*_BASE_URL` and `*_MODEL` for your own Azure resource and deployment. Muse's Contributor tier
 requires accepting its provider data-use conditions in OpenRouter.
 
-Set credentials in your shell or secret manager. The CLI does **not** automatically
-load `.env` files. Do not put keys in model YAML files or commit them to Git.
+The CLI reads environment variables; load `.env` files into your shell before running.
 
 ## Start with a pilot
 
@@ -48,9 +42,7 @@ spider-bench benchmark score --run-id luna-medium-pilot
 spider-bench benchmark report --run-id luna-medium-pilot
 ```
 
-Use a new run ID for each new experiment. Check `status_counts`, `execution_valid`,
-token usage, and estimated cost before starting a larger run. A successfully
-parsed species name is not necessarily the correct answer.
+Use a new run ID for each experiment. Inspect `status_counts`, token usage, and cost before a larger run.
 
 ## Dataset commands
 
@@ -62,10 +54,7 @@ spider-bench benchmark sync --suite species-id-v5 --archive
 
 ## Reproduce the published 2,000-photo setup
 
-Keep the same task count, suite seed, sample seed, image condition, and
-**16,000-token completion ceiling**. Change the model and reasoning effort to the
-configuration you want to measure. The cost below is a budget guard for this Luna
-example, not a quote for every model.
+This uses the published subset, seeds, image condition, and **16,000-token completion ceiling**. Adjust `--model`, `--effort`, and `--max-cost` for your run.
 
 ```bash
 spider-bench benchmark run \
@@ -81,24 +70,13 @@ spider-bench benchmark leaderboard \
   --condition image
 ```
 
-**Do not omit `--max-tasks 2000` when comparing with the published runs.** Omitting
-it selects all 2,183 suite rows and produces a different task hash. The explicit
-leaderboard hash above selects the published 2,000-row comparison.
+`--max-tasks 2000` selects the published subset; the full suite contains 2,183 photos.
 
-The leaderboard includes every scored run in that comparison, including runs with
-request errors, invalid responses, or other execution issues. It keeps separate
-rows for each run and shows their status and failure counts.
+The leaderboard includes every scored run, with status and failure counts.
 
-The CLI supports `--effort low`, `medium`, and `high`; provider support varies.
-DeepSeek uses `high` in the published run. Effort names do not mean equal compute
-across providers. `--seed` verifies the frozen choices, while `--sample-seed`
-controls the deterministic subset. Neither makes model responses deterministic.
-`--model-seed` is separate and depends on provider support.
+`--effort` supports `low`, `medium`, and `high`, depending on the provider. `--seed` verifies the frozen choices; `--sample-seed` selects the subset. `--model-seed` sets the provider RNG seed where supported.
 
-`--max-cost` uses configured price estimates and stops new dispatch after the
-guard is reached. Already running requests finish, so it is not a hard billing
-cap. A run stopped by the guard is incomplete. Keep transport retries separate
-from model failures: empty, invalid, refused, and truncated answers are not retried.
+`--max-cost` stops new requests when estimated spending reaches the budget; in-flight requests finish. Only transport failures are retried.
 
 ## Inspect results and resume
 
@@ -113,18 +91,12 @@ Each run writes to `data/benchmarks/runs/<run-id>/`:
 | `scores.json` | Accuracy, failure counts, and execution validity; created by `benchmark score` |
 | `report.html` | Individual examples and results; created by `benchmark report` |
 
-Scoring existing run files is offline and requires no provider key. Reports use
-public image links, so loading their photos requires network access. Download or
-open `report.html` locally; GitHub displays its source rather than the rendered page.
+Score saved answers offline. Open `report.html` locally in a browser.
 
 For an interrupted run, repeat its original command with the same run ID and
 configuration. Resume is enabled by default and skips saved rows. Changing the
 budget, concurrency, model settings, task snapshot, or benchmark code changes the
 run fingerprint and is rejected. Completed runs require a new run ID to rerun.
-
-Saved execution-validity flags describe completion, unresolved transport errors,
-and available finish reasons. They do not filter the published leaderboard: all
-16 runs remain included, and failures count against accuracy.
 
 For a no-image control, use a new run ID and add `--image-source none` to the same
 command. Compare it separately with `benchmark leaderboard --condition no_image`

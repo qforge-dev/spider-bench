@@ -1,4 +1,4 @@
-"""Medical-significance assessments (plan §2.2, §10F).
+"""Medical-significance assessments.
 
 Primary field ``medical_significance`` with values:
 none_known / minor_local_effects / medically_significant / uncertain.
@@ -105,7 +105,7 @@ def validate_assessment(
         raise ValueError(
             f"assessment for taxon {raw.get('taxon', '?')!r}: missing medical_significance "
             "category — mark 'uncertain' explicitly with rationale, never default to "
-            "'none_known' (plan §2.2, §10F)"
+            "'none_known'"
         )
     try:
         assessment = DangerAssessment.model_validate(raw)

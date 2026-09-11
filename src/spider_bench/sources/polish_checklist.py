@@ -6,10 +6,7 @@ sqlite3.Connection. No network, no boto3.
 """
 from __future__ import annotations
 
-import csv
-import json
 import sqlite3
-from pathlib import Path
 from typing import Any
 
 from spider_bench.taxonomy.normalize import normalize_name
@@ -53,18 +50,6 @@ def parse_checklist_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return out
-
-
-def load_checklist_file(path: str | Path) -> list[dict[str, Any]]:
-    """Load a CSV or JSON checklist file. Pure file read, no network."""
-    p = Path(path)
-    if p.suffix.lower() == ".json":
-        data = json.loads(p.read_text())
-        if isinstance(data, dict) and "taxa" in data:
-            data = data["taxa"]
-        return list(data)
-    with p.open(newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
 
 
 def upsert_source_dataset(
@@ -146,15 +131,3 @@ def ingest_checklist(
             )
             inserted += cur.rowcount or 0
     return {"rows": len(parsed), "source_id": source_id, "upserted": inserted}
-
-
-def ingest_checklist_file(
-    conn: sqlite3.Connection,
-    path: str | Path,
-    *,
-    source: str,
-    version: str | None,
-    **kwargs: Any,
-) -> dict[str, int]:
-    """Load a CSV/JSON file and ingest it. Thin I/O wrapper (no network)."""
-    return ingest_checklist(conn, load_checklist_file(path), source=source, version=version, **kwargs)

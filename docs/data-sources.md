@@ -14,6 +14,4 @@ These records are available in every run's `tasks.jsonl`; for example, the [Gemi
 
 The full suite was prepared from a frozen pool of 2,655 source records. Its 472 exclusions and image-processing rules are documented in the [benchmark methodology](benchmark-v5.md#images-and-labels). Unreviewed Wikimedia search results were excluded; a searched species name was not accepted as evidence for the label of a returned image. GBIF and Wikimedia are not photo sources in the final v5 task set.
 
-Taxonomic labels remain community identifications and can be wrong. The dataset checks establish source provenance, rather than guaranteeing that every species can be identified from the available photograph. Public availability also does not establish that the images were absent from model training.
-
 See [licensing](licensing.md) for the license counts and attribution requirements for these photos.

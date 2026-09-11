@@ -1,4 +1,4 @@
-"""One representative image per checklist species (plan §10C-D, one-per-taxon policy).
+"""One representative image per checklist species.
 
 Metadata-only candidate search first (iNaturalist Poland, licensed photos,
 research-grade preferred), then a single download per species to S3

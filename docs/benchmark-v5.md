@@ -26,13 +26,13 @@ Use `--max-tasks 2000` to match the published comparison. Omitting it evaluates 
 
 Each photo comes with the correct taxon, up to nine same-family alternatives, and other-family names to reach 20 unique choices. Seeded selection and ordering are frozen across runs. The model returns one name in `<SPIDER_NAME>…</SPIDER_NAME>` tags; exact bare candidate names are also accepted. Ambiguous or multiple answers are rejected.
 
-Expected accuracy: **5%** for uniform guessing; **9.93%** for a candidate-only largest-genus heuristic. These are calculated baselines, not measured no-image model results.
+Calculated baselines: **5%** for uniform guessing; **9.93%** for a candidate-only largest-genus heuristic.
 
 ## Scoring and cost
 
 All **16 runs remain included**. Wrong, missing, invalid, empty, refused, truncated, and transport-failed answers count as incorrect. Only transport failures were retried.
 
-Effort labels do not imply equal compute across providers. Hidden reasoning shares the completion ceiling where the API counts it that way.
+Hidden reasoning shares the completion ceiling where the API counts it that way.
 
 Costs are estimates from recorded usage and configured prices. Muse Spark 1.3 uses Contributor pricing, which permits provider training and data use.
 

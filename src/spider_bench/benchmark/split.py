@@ -1,4 +1,4 @@
-"""Observation-disjoint splitter (M2): media rows -> gallery + query suites.
+"""Observation-disjoint splitter: media rows -> gallery + query suites.
 
 Rules: no observation (and no sha256) on both sides; stratify by family;
 gallery keeps 1 canonical image per taxon (earliest accepted), the rest are

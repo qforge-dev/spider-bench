@@ -1,4 +1,4 @@
-"""License profiles: acceptance, review gates, attribution (plan §7).
+"""License profiles: acceptance, review gates, attribution.
 
 Profiles live in version-controlled ``configs/license-profiles.yaml`` and the
 active profile version is stored with every release (never rely on live source
