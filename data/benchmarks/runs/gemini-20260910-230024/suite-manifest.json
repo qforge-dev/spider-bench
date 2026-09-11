@@ -1,0 +1,50 @@
+{
+  "baselines": {
+    "largest_genus_candidate_only": 0.09900148332351727,
+    "uniform_candidate": 0.04999999999999814
+  },
+  "built_at": "2026-09-10T15:12:18.334062+00:00",
+  "candidate_policy": "correct_plus_9_family_plus_10_other",
+  "exclusions": {
+    "not_research_grade": 367,
+    "source_label_mismatch": 30,
+    "source_not_species_level": 19,
+    "source_requires_manual_label_review": 53,
+    "source_resolution_below_320": 3
+  },
+  "image_policy": {
+    "jpeg_quality": 90,
+    "max_bytes": 3000000,
+    "max_long_side": 1536,
+    "metadata": "stripped",
+    "min_short_side": 320,
+    "orientation": "exif-transpose",
+    "upsample": false
+  },
+  "label_policy": "research_grade_exact_source_taxon_and_photo_id",
+  "limitations": [
+    "Source labels are community identifications, not an expert image audit.",
+    "Public photos may have appeared in model training.",
+    "Zero-shot query evaluation; no claim of a hidden training/test split.",
+    "Photos may be taken anywhere; taxa derive from the Polish checklist.",
+    "Shortlists supply taxonomic context; this is not open-world identification."
+  ],
+  "prepublication_tasks_hash": "5bd4c5b519bb501880664e315d02809f0e4c860f49cd483f0ab6bbb0e556e8df",
+  "protocol_version": 5,
+  "seed": 42,
+  "shortlist_sizes": {
+    "20": 2183
+  },
+  "source_tasks_hash": "999f7def8b8f622d977edfe0e265a79074e58a6be96cdd613abfd63386fe19fd",
+  "source_tasks_s3_uri": "s3://spiders-dataset-088543363904/poland/benchmarks/species-id-v5/source-tasks.jsonl",
+  "storage": {
+    "bucket": "spiders-dataset-088543363904",
+    "kind": "s3",
+    "prefix": "poland/benchmarks/species-id-v5/",
+    "region": "us-east-1"
+  },
+  "suite": "species-id-v5",
+  "tasks": 2183,
+  "tasks_hash": "79a3edf7edd9a89676c9ff640872bbfa5d91d36a2594312d0552085967450f1e",
+  "taxa": 671
+}

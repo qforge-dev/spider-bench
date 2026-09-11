@@ -1,9 +1,29 @@
 # ---> generated / machine-managed dirs
-data/
+/data/*
+# Version benchmark evidence; keep caches, source snapshots and operational files local.
+!/data/benchmarks/
+/data/benchmarks/*
+!/data/benchmarks/leaderboard.json
+!/data/benchmarks/leaderboard.md
+!/data/benchmarks/leaderboard.html
+!/data/benchmarks/runs/
+/data/benchmarks/runs/*/*
+!/data/benchmarks/runs/*/manifest.json
+!/data/benchmarks/runs/*/suite-manifest.json
+!/data/benchmarks/runs/*/tasks.jsonl
+!/data/benchmarks/runs/*/predictions.jsonl
+!/data/benchmarks/runs/*/scores.json
+!/data/benchmarks/runs/*/report.html
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
 .env
+.env.*
+*.env
+.envrc
+!.env.example
+!.env.sample
+*.log
 # ---> python
 __pycache__/
 *.pyc
@@ -13,7 +33,27 @@ dist/
 build/
 # ---> aws / secrets
 .aws/
+.azure/
+.ssh/
+.config/gcloud/
+.git-credentials
+.netrc
+.pypirc
+credentials
+credentials.json
+service-account*.json
+secrets/
 *.pem
+*.key
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_ed25519
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
 # ---> os
 .DS_Store
 # ---> caches

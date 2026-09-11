@@ -1,0 +1,72 @@
+{
+  "model_id": "muse",
+  "suite": "species-id-v5",
+  "run_id": "muse-20260911-013451",
+  "protocol_version": 5,
+  "run_hash": "a2df5c35832b6d4ad04f81135e152618e1c1f35b1bd75ded547f1d9328efbaae",
+  "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+  "adapter": {
+    "adapter": "openai-compatible",
+    "model": "meta/muse-spark-1.3-contributor",
+    "base_url": "https://openrouter.ai/api/v1",
+    "region": "us-east-1",
+    "temperature": null,
+    "token_param": "max_tokens",
+    "structured_output": false,
+    "reasoning_effort": "medium",
+    "reasoning_api": "openai",
+    "reasoning_style": "nested",
+    "seed": null,
+    "max_output_tokens": 16000
+  },
+  "params": {
+    "timeout_s": 180.0,
+    "concurrency": 10,
+    "rate_limit": 0.0,
+    "retries": 3,
+    "max_tasks": 2000,
+    "max_cost": 10.0,
+    "condition": "image",
+    "sample_seed": 42,
+    "suite_seed": 42
+  },
+  "code_hash": "ccc0d54d723f1dcd63fa5d90fc8d0dcddcc74a674c8a7f7d3807b64d2b6b2a93",
+  "tasks": 2000,
+  "status": "complete",
+  "condition": "image",
+  "started_at": "2026-09-10T23:34:51.606359+00:00",
+  "git_sha": "27642dcdf3b68647b49eb914819a6f952b6618d5",
+  "dirty_tree": true,
+  "pricing_usd": {
+    "price_per_1k_requests": 0.0,
+    "price_input_1k_tokens": 0.0001,
+    "price_output_1k_tokens": 0.0002,
+    "price_cached_1k_tokens": 2e-06
+  },
+  "usage": {
+    "requests": 2000,
+    "input_tokens": 2396537,
+    "output_tokens": 2738842,
+    "cached_input_tokens": 2146
+  },
+  "estimated_cost_usd": 0.7872,
+  "summary": {
+    "tasks": 2000,
+    "wrote": 2000,
+    "resumed": 0,
+    "errors": 0,
+    "retried": 0,
+    "seconds": 3283.7,
+    "workers": 10,
+    "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+    "predictions_path": "data/benchmarks/runs/muse-20260911-013451/predictions.jsonl",
+    "usage": {
+      "requests": 2000,
+      "input_tokens": 2396537,
+      "output_tokens": 2738842,
+      "cached_input_tokens": 2146
+    },
+    "estimated_cost_usd": 0.7872
+  },
+  "finished_at": "2026-09-11T00:29:35.377479+00:00"
+}

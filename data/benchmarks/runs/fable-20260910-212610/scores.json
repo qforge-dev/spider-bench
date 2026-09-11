@@ -1,0 +1,241 @@
+{
+  "tasks": 2000,
+  "scored": 2000,
+  "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+  "complete": true,
+  "missing": 0,
+  "errors": 2,
+  "transport_errors": 0,
+  "status_counts": {
+    "answered": 1998,
+    "refused": 1,
+    "invalid_answer": 1
+  },
+  "missing_stop_reasons": 0,
+  "execution_valid": true,
+  "top1": 0.431,
+  "answer_rate": 0.999,
+  "top1_answered_only": 0.4314314314314314,
+  "macro_species_top1": 0.40126676602086436,
+  "per_family": {
+    "Agelenidae": {
+      "n": 43,
+      "correct": 21,
+      "top1": 0.4883720930232558
+    },
+    "Amaurobiidae": {
+      "n": 16,
+      "correct": 7,
+      "top1": 0.4375
+    },
+    "Anyphaenidae": {
+      "n": 4,
+      "correct": 1,
+      "top1": 0.25
+    },
+    "Araneidae": {
+      "n": 162,
+      "correct": 101,
+      "top1": 0.6234567901234568
+    },
+    "Argyronetidae": {
+      "n": 7,
+      "correct": 4,
+      "top1": 0.5714285714285714
+    },
+    "Atypidae": {
+      "n": 11,
+      "correct": 4,
+      "top1": 0.36363636363636365
+    },
+    "Cheiracanthiidae": {
+      "n": 23,
+      "correct": 9,
+      "top1": 0.391304347826087
+    },
+    "Cicurinidae": {
+      "n": 4,
+      "correct": 2,
+      "top1": 0.5
+    },
+    "Clubionidae": {
+      "n": 63,
+      "correct": 24,
+      "top1": 0.38095238095238093
+    },
+    "Cybaeidae": {
+      "n": 11,
+      "correct": 5,
+      "top1": 0.45454545454545453
+    },
+    "Dictynidae": {
+      "n": 25,
+      "correct": 12,
+      "top1": 0.48
+    },
+    "Dolomedidae": {
+      "n": 8,
+      "correct": 5,
+      "top1": 0.625
+    },
+    "Dysderidae": {
+      "n": 20,
+      "correct": 10,
+      "top1": 0.5
+    },
+    "Eresidae": {
+      "n": 8,
+      "correct": 5,
+      "top1": 0.625
+    },
+    "Gnaphosidae": {
+      "n": 136,
+      "correct": 67,
+      "top1": 0.49264705882352944
+    },
+    "Hahniidae": {
+      "n": 21,
+      "correct": 4,
+      "top1": 0.19047619047619047
+    },
+    "Lathyidae": {
+      "n": 5,
+      "correct": 2,
+      "top1": 0.4
+    },
+    "Linyphiidae": {
+      "n": 490,
+      "correct": 147,
+      "top1": 0.3
+    },
+    "Liocranidae": {
+      "n": 32,
+      "correct": 8,
+      "top1": 0.25
+    },
+    "Lycosidae": {
+      "n": 183,
+      "correct": 74,
+      "top1": 0.40437158469945356
+    },
+    "Mimetidae": {
+      "n": 14,
+      "correct": 3,
+      "top1": 0.21428571428571427
+    },
+    "Miturgidae": {
+      "n": 16,
+      "correct": 3,
+      "top1": 0.1875
+    },
+    "Mysmenidae": {
+      "n": 3,
+      "correct": 2,
+      "top1": 0.6666666666666666
+    },
+    "Nesticidae": {
+      "n": 6,
+      "correct": 3,
+      "top1": 0.5
+    },
+    "Oonopidae": {
+      "n": 10,
+      "correct": 7,
+      "top1": 0.7
+    },
+    "Oxyopidae": {
+      "n": 7,
+      "correct": 3,
+      "top1": 0.42857142857142855
+    },
+    "Philodromidae": {
+      "n": 77,
+      "correct": 35,
+      "top1": 0.45454545454545453
+    },
+    "Pholcidae": {
+      "n": 18,
+      "correct": 8,
+      "top1": 0.4444444444444444
+    },
+    "Phrurolithidae": {
+      "n": 7,
+      "correct": 2,
+      "top1": 0.2857142857142857
+    },
+    "Pisauridae": {
+      "n": 3,
+      "correct": 3,
+      "top1": 1.0
+    },
+    "Salticidae": {
+      "n": 190,
+      "correct": 98,
+      "top1": 0.5157894736842106
+    },
+    "Scytodidae": {
+      "n": 3,
+      "correct": 3,
+      "top1": 1.0
+    },
+    "Segestriidae": {
+      "n": 6,
+      "correct": 4,
+      "top1": 0.6666666666666666
+    },
+    "Sparassidae": {
+      "n": 4,
+      "correct": 4,
+      "top1": 1.0
+    },
+    "Tetragnathidae": {
+      "n": 52,
+      "correct": 24,
+      "top1": 0.46153846153846156
+    },
+    "Theridiidae": {
+      "n": 171,
+      "correct": 80,
+      "top1": 0.4678362573099415
+    },
+    "Theridiosomatidae": {
+      "n": 4,
+      "correct": 4,
+      "top1": 1.0
+    },
+    "Thomisidae": {
+      "n": 106,
+      "correct": 46,
+      "top1": 0.4339622641509434
+    },
+    "Titanoecidae": {
+      "n": 7,
+      "correct": 4,
+      "top1": 0.5714285714285714
+    },
+    "Trachelidae": {
+      "n": 3,
+      "correct": 2,
+      "top1": 0.6666666666666666
+    },
+    "Uloboridae": {
+      "n": 11,
+      "correct": 7,
+      "top1": 0.6363636363636364
+    },
+    "Zodariidae": {
+      "n": 7,
+      "correct": 2,
+      "top1": 0.2857142857142857
+    },
+    "Zoropsidae": {
+      "n": 3,
+      "correct": 3,
+      "top1": 1.0
+    }
+  },
+  "baselines": {
+    "uniform_candidate": 0.04999999999999823,
+    "largest_genus_candidate_only": 0.09931309523809528
+  }
+}

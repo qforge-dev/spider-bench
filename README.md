@@ -13,10 +13,26 @@ s3://spiders-dataset-088543363904/
   germany/...                   # future
 ```
 
-Local repo holds **only code, configs, schemas, docs, tests**.
+The repo holds **code, configs, schemas, docs, tests, and completed benchmark results**.
 Local machine holds a small SQLite index in `data/work/spider-bench.sqlite`
 (gitignored) with `s3_uri` links. Benchmark images and source evidence use a
 disposable, checksum-verified local cache; S3 holds the permanent copies.
+
+## Benchmark results in Git
+
+Completed runs are versioned under `data/benchmarks/runs/<run-id>/`: frozen tasks,
+predictions, run and suite manifests, scores, and generated reports when available.
+The leaderboard is versioned under `data/benchmarks/leaderboard.*`. Each task retains
+its source attribution and image license; image bytes remain in S3. These results
+use the fixed v5 task lists and include failed model answers in the denominator.
+Runs that fail execution validation, such as responses without finish reasons,
+remain available for inspection but are excluded from the leaderboard.
+
+Only stage completed, reviewed runs. Environment files (including `.env.local`),
+credentials, private keys, caches, SQLite databases, operational logs, and run
+backups are ignored. Endpoint addresses and public dataset URLs are intentional;
+API keys are supplied through environment variables. Before pushing new results,
+check the staged files and scan them for secrets, including provider error text.
 
 ## Quickstart
 

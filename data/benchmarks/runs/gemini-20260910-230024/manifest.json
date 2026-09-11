@@ -1,0 +1,72 @@
+{
+  "model_id": "gemini",
+  "suite": "species-id-v5",
+  "run_id": "gemini-20260910-230024",
+  "protocol_version": 5,
+  "run_hash": "84ed7fde4a5b0fa91c3b12688790c4dd12995565b273f81f9550811e5409a459",
+  "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+  "adapter": {
+    "adapter": "openai-compatible",
+    "model": "gemini-3.8-flash",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "region": "us-east-1",
+    "temperature": null,
+    "token_param": "max_tokens",
+    "structured_output": false,
+    "reasoning_effort": "high",
+    "reasoning_api": "openai",
+    "reasoning_style": "flat",
+    "seed": null,
+    "max_output_tokens": 16000
+  },
+  "params": {
+    "timeout_s": 180.0,
+    "concurrency": 10,
+    "rate_limit": 0.0,
+    "retries": 3,
+    "max_tasks": 2000,
+    "max_cost": 100.0,
+    "condition": "image",
+    "sample_seed": 42,
+    "suite_seed": 42
+  },
+  "code_hash": "ccc0d54d723f1dcd63fa5d90fc8d0dcddcc74a674c8a7f7d3807b64d2b6b2a93",
+  "tasks": 2000,
+  "status": "complete",
+  "condition": "image",
+  "started_at": "2026-09-10T21:00:24.753350+00:00",
+  "git_sha": "27642dcdf3b68647b49eb914819a6f952b6618d5",
+  "dirty_tree": true,
+  "pricing_usd": {
+    "price_per_1k_requests": 0.0,
+    "price_input_1k_tokens": 0.00075,
+    "price_output_1k_tokens": 0.00375,
+    "price_cached_1k_tokens": 7.5e-05
+  },
+  "usage": {
+    "requests": 2000,
+    "input_tokens": 2638124,
+    "output_tokens": 6702672,
+    "cached_input_tokens": 0
+  },
+  "estimated_cost_usd": 27.1136,
+  "summary": {
+    "tasks": 2000,
+    "wrote": 2000,
+    "resumed": 0,
+    "errors": 0,
+    "retried": 11,
+    "seconds": 2885.6,
+    "workers": 10,
+    "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+    "predictions_path": "data/benchmarks/runs/gemini-20260910-230024/predictions.jsonl",
+    "usage": {
+      "requests": 2000,
+      "input_tokens": 2638124,
+      "output_tokens": 6702672,
+      "cached_input_tokens": 0
+    },
+    "estimated_cost_usd": 27.1136
+  },
+  "finished_at": "2026-09-10T21:48:30.452357+00:00"
+}
