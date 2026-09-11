@@ -72,6 +72,18 @@
     "cost_usd": 0.7872
   },
   {
+    "run_id": "glm-20260911-153101",
+    "model": "glm",
+    "effort": "high",
+    "suite": "species-id-v5",
+    "tasks": 2000,
+    "top1": 0.3675,
+    "macro_species_top1": 0.338301043219076,
+    "answer_rate": 0.9985,
+    "errors": 3,
+    "cost_usd": 1.4589
+  },
+  {
     "run_id": "sol-20260910-235122",
     "model": "sol",
     "effort": "high",

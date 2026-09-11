@@ -23,7 +23,7 @@ without printing their values.
 | :--- | :--- | :--- |
 | `luna`, `terra`, `sol`, `astra` | `LUNA_API_KEY`, `TERRA_API_KEY`, `SOL_API_KEY`, `ASTRA_API_KEY` respectively | Matching `*_BASE_URL` and `*_MODEL` |
 | `gemini` | `GEMINI_API_KEY` | `GEMINI_BASE_URL`, `GEMINI_MODEL` |
-| `deepseek`, `muse`, `grok` | `OPENROUTER_API_KEY` | `OPENROUTER_BASE_URL`; `DEEPSEEK_MODEL`, `MUSE_MODEL`, or `GROK_MODEL` |
+| `deepseek`, `muse`, `grok`, `glm` | `OPENROUTER_API_KEY` | `OPENROUTER_BASE_URL`; `DEEPSEEK_MODEL`, `MUSE_MODEL`, `GROK_MODEL`, or `GLM_MODEL` |
 | `fable` | Standard AWS credential chain: environment, profile, SSO, or IAM role | `FABLE_REGION`, `FABLE_MODEL` |
 
 Azure configs point to the original experiment's resource. Set the matching

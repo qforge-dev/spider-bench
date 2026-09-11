@@ -1,0 +1,72 @@
+{
+  "model_id": "astra",
+  "suite": "species-id-v5",
+  "run_id": "astra-20260911-151008",
+  "protocol_version": 5,
+  "run_hash": "eb420d6bbc9ed1c20cf4b78cc23cfc9863b260bbd5af46ed0619265bf89ed3b7",
+  "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+  "adapter": {
+    "adapter": "openai-compatible",
+    "model": "gpt-6-astra",
+    "base_url": "https://ps-mp2xfc81-eastus2.openai.azure.com/openai/v1",
+    "region": "us-east-1",
+    "temperature": null,
+    "token_param": "max_completion_tokens",
+    "structured_output": false,
+    "reasoning_effort": "high",
+    "reasoning_api": "openai",
+    "reasoning_style": "flat",
+    "seed": null,
+    "max_output_tokens": 16000
+  },
+  "params": {
+    "timeout_s": 180.0,
+    "concurrency": 5,
+    "rate_limit": 0.0,
+    "retries": 3,
+    "max_tasks": 2000,
+    "max_cost": 100.0,
+    "condition": "image",
+    "sample_seed": 42,
+    "suite_seed": 42
+  },
+  "code_hash": "ccc0d54d723f1dcd63fa5d90fc8d0dcddcc74a674c8a7f7d3807b64d2b6b2a93",
+  "tasks": 2000,
+  "status": "complete",
+  "condition": "image",
+  "started_at": "2026-09-11T13:10:08.181253+00:00",
+  "git_sha": "edd0a709c31cd46b929b7d7f147e0abeca348143",
+  "dirty_tree": true,
+  "pricing_usd": {
+    "price_per_1k_requests": 0.0,
+    "price_input_1k_tokens": 0.01,
+    "price_output_1k_tokens": 0.05,
+    "price_cached_1k_tokens": 0.001
+  },
+  "usage": {
+    "requests": 1997,
+    "input_tokens": 1872104,
+    "output_tokens": 1576173,
+    "cached_input_tokens": 0
+  },
+  "estimated_cost_usd": 97.5297,
+  "summary": {
+    "tasks": 2000,
+    "wrote": 2000,
+    "resumed": 0,
+    "errors": 3,
+    "retried": 26,
+    "seconds": 17264.6,
+    "workers": 5,
+    "tasks_hash": "f9d9061c790f4c98de707be7e39270c87dfff2a025b162f535ec98d271071545",
+    "predictions_path": "data/benchmarks/runs/astra-20260911-151008/predictions.jsonl",
+    "usage": {
+      "requests": 1997,
+      "input_tokens": 1872104,
+      "output_tokens": 1576173,
+      "cached_input_tokens": 0
+    },
+    "estimated_cost_usd": 97.5297
+  },
+  "finished_at": "2026-09-11T17:57:52.896824+00:00"
+}
