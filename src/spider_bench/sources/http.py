@@ -96,7 +96,7 @@ def fetch_json_sync(
                 rate_limiter.acquire_sync()
             try:
                 r = c.get(url, params=params, headers=send_headers)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 if should_retry_exc(e) and attempt < retries:
                     time.sleep(backoff_delay(attempt, backoff_base))
                     continue
@@ -138,7 +138,7 @@ async def fetch_json_async(
                 await rate_limiter.acquire_async()
             try:
                 r = await client.get(url, params=params, headers=send_headers)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 if should_retry_exc(e) and attempt < retries:
                     await asyncio.sleep(backoff_delay(attempt, backoff_base))
                     continue
@@ -178,6 +178,6 @@ class PageCursor:
         return {"page": self.page, "last_id": self.last_id, "extra": self.extra}
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any] | None) -> "PageCursor":
+    def from_dict(cls, d: dict[str, Any] | None) -> PageCursor:
         d = d or {}
         return cls(page=int(d.get("page", 1) or 1), last_id=d.get("last_id"), extra=dict(d.get("extra", {})))

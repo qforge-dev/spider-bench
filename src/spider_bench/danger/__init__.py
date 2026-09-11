@@ -8,8 +8,8 @@ Missing evidence must stay ``uncertain``/unreviewed — never ``none_known``.
 from spider_bench.danger.assessments import (
     DISPLAY_ORDINAL,
     SAFETY_NOTICE,
-    MedicalSignificance,
     DangerAssessment,
+    MedicalSignificance,
     display_ordinal,
 )
 from spider_bench.danger.evidence import (

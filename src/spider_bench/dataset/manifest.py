@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -108,7 +108,7 @@ def build_release(
 
     release = {
         "version": version,
-        "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "config_hash": config_hash,
         "code_commit": code_commit,
         "taxonomy_snapshot": taxonomy_snapshot,

@@ -2,8 +2,7 @@
 id: sol
 display_name: Sol (vision)
 adapter: openai-compatible
-# Endpoint + credentials (env names; values never touch disk/logs).
-base_url: https://ps-mp2xfc81-eastus2.openai.azure.com/openai/v1
+# Set your own endpoint and credentials through the variables below.
 base_url_env: SOL_BASE_URL
 api_key_env: SOL_API_KEY
 model_env: SOL_MODEL

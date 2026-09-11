@@ -2,6 +2,7 @@
 import pytest
 
 from spider_bench.danger.assessments import (
+    DangerAssessment,
     display_ordinal,
     import_assessments,
     validate_assessment,
@@ -13,7 +14,6 @@ from spider_bench.danger.review import (
     apply_transition,
     requires_second_reviewer,
 )
-from spider_bench.danger.assessments import DangerAssessment
 
 
 def _sources_claims():

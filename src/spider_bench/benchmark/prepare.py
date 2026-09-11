@@ -12,15 +12,21 @@ import sqlite3
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
-from spider_bench.benchmark.protocol import IMAGE_POLICY, baselines, mixed_candidates, prepare_image, sample_tasks
+from spider_bench.benchmark.protocol import (
+    IMAGE_POLICY,
+    baselines,
+    mixed_candidates,
+    prepare_image,
+    sample_tasks,
+)
 from spider_bench.benchmark.tasks import _prompts, read_tasks, tasks_hash
-from spider_bench.media.select import normalize_license, load_license_profile
 from spider_bench.media.collect_one import _large_photo_url
+from spider_bench.media.select import load_license_profile, normalize_license
 
 
 def verify_observation(task: dict, media: dict, observation: dict, accepted_licenses: set) -> tuple[dict | None, str | None]:
@@ -94,7 +100,7 @@ def prepare_suite(source: str | Path, out: str | Path,
                 reduced = {k: record.get(k) for k in (
                     "id", "taxon", "quality_grade", "photos", "captive", "observed_on", "place_guess")}
                 reduced["observer_id"] = (record.get("user") or {}).get("id")
-                reduced["fetched_at"] = datetime.now(timezone.utc).isoformat()
+                reduced["fetched_at"] = datetime.now(UTC).isoformat()
                 (snapshots / f"{oid}.json").write_text(json.dumps(reduced, sort_keys=True))
             progress(f"source records {min(start + 100, len(missing))}/{len(missing)}")
             time.sleep(1)
@@ -208,7 +214,7 @@ def prepare_suite(source: str | Path, out: str | Path,
                 "shortlist_sizes": dict(Counter(len(t["candidates"]) for t in kept)),
                 "label_policy": "research_grade_exact_source_taxon_and_photo_id",
                 "exclusions": dict(Counter(e["reason"] for e in exclusions)),
-                "baselines": baselines(kept), "built_at": datetime.now(timezone.utc).isoformat(),
+                "baselines": baselines(kept), "built_at": datetime.now(UTC).isoformat(),
                 "limitations": ["Source labels are community identifications, not an expert image audit.",
                                 "Public photos may have appeared in model training.",
                                 "Zero-shot query evaluation; no claim of a hidden training/test split.",
@@ -252,8 +258,9 @@ def validate_suite(directory: str | Path, *, cache=None, download: bool = True) 
         data = task_asset(t, "image", **asset_options)
         if hashlib.sha256(data).hexdigest() != t["image_sha256"] or len(data) > IMAGE_POLICY["max_bytes"]:
             raise ValueError("prepared image checksum/size mismatch")
-        from PIL import Image
         import io
+
+        from PIL import Image
         with Image.open(io.BytesIO(data)) as image:
             image.load()
             if image.format != "JPEG" or min(image.size) < 320 or max(image.size) > 1536 or image.getexif():

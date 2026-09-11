@@ -1,4 +1,4 @@
-"""Unit tests: manifest determinism + §11 verify gates."""
+"""Unit tests: manifest determinism and release validation."""
 import hashlib
 import json
 

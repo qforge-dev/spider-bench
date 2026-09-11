@@ -3,7 +3,7 @@
 id: fable
 display_name: Fable (Bedrock)
 adapter: bedrock-converse
-# Region + model id (env overrides; values never touch disk/logs).
+# Region and model ID can be overridden through environment variables.
 region_env: FABLE_REGION
 region: us-east-1
 model_env: FABLE_MODEL
@@ -24,4 +24,4 @@ price_output_1k_tokens: 0.05
 # Runner limits.
 timeout_s: 180
 max_tasks_default: 10
-notes: Pricing unknown — set before any large run or --max-cost is meaningless.
+notes: Bedrock pricing reference used for the published runs; adjust rates for your account.

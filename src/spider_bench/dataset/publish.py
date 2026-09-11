@@ -39,7 +39,7 @@ def verify_release(
     expected_version: str | None = None,
     strict_reports: bool = False,
 ) -> list[str]:
-    """Enforce release gates (§11). Returns list of error strings (empty = pass).
+    """Validate release integrity and required metadata. Returns list of error strings (empty = pass).
 
     Fails when:
     - included image lacks provenance / creator / accepted license;
@@ -127,7 +127,7 @@ def verify_release(
         seen_sha.add(sha)
         for field in ("s3_uri", "creator", "license", "source_record", "taxon"):
             if not str(m.get(field, "") or "").strip():
-                _fail(errors, f"media {sha[:12]}… lacks {field} (gate §11)")
+                _fail(errors, f"media {sha[:12]}… lacks {field}")
         taxon = str(m.get("taxon", "") or "")
         if taxon and taxa and taxon not in taxa_names:
             _fail(errors, f"media {sha[:12]}… taxon {taxon!r} absent from taxonomy snapshot")
@@ -243,7 +243,7 @@ def publish_release(
     if s3mod.key_exists(s3, bucket, complete_key):
         raise ValueError(
             f"refusing to mutate completed release s3://{bucket}/{complete_key} "
-            "(material change requires a new version, §11)"
+            "(material change requires a new version)"
         )
 
     staging_prefix = f"{base}releases/.staging-{version}-tmp/"

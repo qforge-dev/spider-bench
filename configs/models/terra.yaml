@@ -3,8 +3,7 @@
 id: terra
 display_name: Terra (vision)
 adapter: openai-compatible
-# Endpoint + credentials (env names; values never touch disk/logs).
-base_url: https://ps-mp2xfc81-eastus2.openai.azure.com/openai/v1
+# Set your own endpoint and credentials through the variables below.
 base_url_env: TERRA_BASE_URL
 api_key_env: TERRA_API_KEY
 model_env: TERRA_MODEL              # default below
@@ -26,4 +25,4 @@ price_output_1k_tokens: 0.012
 # Runner limits.
 timeout_s: 120
 max_tasks_default: 100
-notes: Placeholder values — confirm model name + pricing before any paid run.
+notes: Pricing reference from 2026-09-09; set your endpoint and deployment through environment variables.

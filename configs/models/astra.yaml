@@ -2,8 +2,7 @@
 id: astra
 display_name: Astra (vision)
 adapter: openai-compatible
-# Same Azure endpoint as Terra and Sol; deployment and credentials via env.
-base_url: https://ps-mp2xfc81-eastus2.openai.azure.com/openai/v1
+# Set your own endpoint and credentials through the variables below.
 base_url_env: ASTRA_BASE_URL
 api_key_env: ASTRA_API_KEY
 model_env: ASTRA_MODEL

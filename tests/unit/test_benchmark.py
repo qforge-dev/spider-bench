@@ -98,7 +98,7 @@ def test_collect_n_skips_known_observations():
 
     import httpx
     _orig = httpx.Client
-    httpx.Client = lambda *a, **k: Client()  # noqa: E731
+    httpx.Client = lambda *a, **k: Client()
     try:
         m = collect_n_candidates(["Aa a"], rate_limit=10000, per_species=10,
                                  skip_observation_ids={1})
@@ -115,11 +115,16 @@ def test_registry_resolves_env_and_hides_secrets(tmp_path, monkeypatch):
         "api_key_env: T_KEY\nmodel_env: T_MODEL\nmodel: placeholder\n"
         "price_per_1k_requests: 0.5\n")
     monkeypatch.setenv("T_KEY", "sekret")
+    monkeypatch.setenv("T_BASE", "https://example.org/openai/v1")
     monkeypatch.setenv("T_MODEL", "terra-1")
     reg = load_registry(tmp_path)
     r = resolve_model(reg["terra"])
     assert r["model"] == "terra-1" and r["has_key"] is True
     assert "sekret" not in str(describe_registry(tmp_path))
+    monkeypatch.delenv("T_BASE")
+    import pytest
+    with pytest.raises(RuntimeError, match="T_BASE"):
+        resolve_model(reg["terra"])
     monkeypatch.delenv("T_KEY")
     try:
         resolve_model(reg["terra"])
@@ -506,7 +511,7 @@ def test_shortlist_deterministic_and_contains_answer():
         assert t["correct_taxon"] in t["candidates"] and len(t["candidates"]) == 2
         assert "user_prompt" in t and "system_prompt" in t
         assert t["task_id"].startswith("s3:")
-    assert a != c or True  # seed recorded regardless
+    assert all(t["meta"]["shortlist_seed"] == 8 for t in c)
     assert all(t["meta"]["shortlist_seed"] == 7 for t in a)
 
 

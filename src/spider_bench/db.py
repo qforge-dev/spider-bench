@@ -84,7 +84,7 @@ def _apply_pending(conn: sqlite3.Connection) -> None:
         conn.executescript(sql)
         conn.execute(
             "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-            (version, _dt.datetime.now(_dt.timezone.utc).isoformat()),
+            (version, _dt.datetime.now(_dt.UTC).isoformat()),
         )
     conn.commit()
 

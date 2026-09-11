@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -80,7 +79,7 @@ def status(config: str = typer.Option("configs/poland.yaml", "--config")) -> Non
         key_count = resp.get("KeyCount", 0)
         s3_ok = True
     except Exception as e:  # noqa: BLE001
-        s3_ok, key_count, e = False, 0, e
+        s3_ok, key_count = False, 0
         typer.echo(f"s3 error: {e}")
     typer.echo(f"bucket=s3://{cfg.aws.bucket}/{cfg.aws.prefix} reachable={s3_ok} sample_keys={key_count}")
     typer.echo(f"sqlite={cfg.local_.sqlite_path} exists={db_exists}")
@@ -129,7 +128,7 @@ def taxonomy_collect(
     max_records: int = typer.Option(1000, "--max-records"),
     resume: bool = typer.Option(False, "--resume"),
     concurrency: int = typer.Option(4, "--concurrency"),
-    input: Optional[str] = typer.Option(None, "--input", help="Local checklist CSV (default: download araneae PL export)"),
+    input: str | None = typer.Option(None, "--input", help="Local checklist CSV (default: download araneae PL export)"),
     snapshot: str = typer.Option("araneae-09.2026", "--snapshot"),
 ) -> None:
     """Ingest versioned Polish checklist + taxonomy snapshot (idempotent, resumable)."""
@@ -206,7 +205,7 @@ def taxonomy_reconcile(
 @taxonomy_app.command("common-names")
 def taxonomy_common_names(
     config: str = typer.Option("configs/poland.yaml", "--config"),
-    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    max_species: int | None = typer.Option(None, "--max-species"),
     rate_limit: float = typer.Option(2.0, "--rate-limit"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
@@ -394,8 +393,7 @@ def audit_coverage(
 ) -> None:
     """Per-taxon image coverage: every checklist species flagged has_image true/false.
 
-    has_image=false rows are the explicit no-image pointer required by §2.1
-    (stored in the report + uploaded to S3, never silently dropped).
+    Rows with has_image=false remain in the coverage report.
     """
     import httpx as _httpx
 
@@ -466,7 +464,7 @@ def audit_coverage(
 @audit_app.command("licenses")
 def audit_licenses(
     config: str = typer.Option("configs/poland.yaml", "--config"),
-    input: Optional[str] = typer.Option(None, "--input", help="Candidates JSON file"),
+    input: str | None = typer.Option(None, "--input", help="Candidates JSON file"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """Classify candidate media licenses against the active profile."""
@@ -518,7 +516,7 @@ def media_select(
 def media_collect_one(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     profile: str = typer.Option("research", "--profile"),
-    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    max_species: int | None = typer.Option(None, "--max-species"),
     rate_limit: float = typer.Option(2.0, "--rate-limit"),
     download: bool = typer.Option(True, "--download/--no-download"),
     out: str = typer.Option("data/work/one-per-species.json", "--out"),
@@ -600,7 +598,7 @@ def media_collect_n(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     profile: str = typer.Option("research", "--profile"),
     per_species: int = typer.Option(10, "--per-species"),
-    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    max_species: int | None = typer.Option(None, "--max-species"),
     rate_limit: float = typer.Option(2.0, "--rate-limit"),
     download: bool = typer.Option(True, "--download/--no-download"),
     out: str = typer.Option("data/work/collect-n.json", "--out"),
@@ -668,7 +666,7 @@ def media_gap_fill(
     config: str = typer.Option("configs/poland.yaml", "--config"),
     input: str = typer.Option("data/work/one-per-species.json", "--input"),
     profile: str = typer.Option("research", "--profile"),
-    max_species: Optional[int] = typer.Option(None, "--max-species"),
+    max_species: int | None = typer.Option(None, "--max-species"),
     rate_limit: float = typer.Option(2.0, "--rate-limit"),
     download: bool = typer.Option(True, "--download/--no-download"),
     out: str = typer.Option("data/work/gap-fill.json", "--out"),
@@ -730,7 +728,7 @@ def media_gap_fill(
 @media_app.command("upgrade-urls")
 def media_upgrade_urls(
     config: str = typer.Option("configs/poland.yaml", "--config"),
-    max_records: Optional[int] = typer.Option(None, "--max-records"),
+    max_records: int | None = typer.Option(None, "--max-records"),
     concurrency: int = typer.Option(12, "--concurrency"),
     gallery_only: bool = typer.Option(False, "--gallery-only",
                                       help="one row per taxon (the gallery image)"),
@@ -915,7 +913,7 @@ def release_build(
 @release_app.command("verify")
 def release_verify(
     version: str = typer.Option(..., "--version"),
-    dir: Optional[str] = typer.Option(None, "--dir"),
+    dir: str | None = typer.Option(None, "--dir"),
     config: str = typer.Option("configs/poland.yaml", "--config"),
     strict_reports: bool = typer.Option(False, "--strict-reports"),
 ) -> None:
@@ -934,7 +932,7 @@ def release_verify(
 @release_app.command("publish")
 def release_publish(
     version: str = typer.Option(..., "--version"),
-    dir: Optional[str] = typer.Option(None, "--dir"),
+    dir: str | None = typer.Option(None, "--dir"),
     config: str = typer.Option("configs/poland.yaml", "--config"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
@@ -955,7 +953,7 @@ def release_publish(
 @benchmark_app.command("build-tasks")
 def benchmark_build_tasks(
     version: str = typer.Option("0.4.0", "--version"),
-    dir: Optional[str] = typer.Option(None, "--dir"),
+    dir: str | None = typer.Option(None, "--dir"),
     out: str = typer.Option("data/benchmarks/species-id-closed-v1", "--out"),
     imaged_only: bool = typer.Option(True, "--imaged-only/--all-taxa"),
 ) -> None:
@@ -1016,7 +1014,7 @@ def benchmark_validate(
 @benchmark_app.command("publish-suite")
 def benchmark_publish_suite(
     suite: str = typer.Option("species-id-v5", "--suite"),
-    directory: Optional[str] = typer.Option(None, "--directory", help="local preparation directory"),
+    directory: str | None = typer.Option(None, "--directory", help="local preparation directory"),
     config: str = typer.Option("configs/poland.yaml", "--config"),
     preparation_cache: str = typer.Option("data/work/benchmark-v5", "--preparation-cache"),
     dry_run: bool = typer.Option(False, "--dry-run"),
@@ -1044,7 +1042,7 @@ def benchmark_publish_suite(
 def benchmark_sync(
     suite: str = typer.Option("species-id-v5", "--suite"),
     config: str = typer.Option("configs/poland.yaml", "--config"),
-    out: Optional[str] = typer.Option(None, "--out"),
+    out: str | None = typer.Option(None, "--out"),
     cache_dir: str = typer.Option("data/work/benchmark-s3-cache", "--cache-dir"),
     archive: bool = typer.Option(False, "--archive", help="also download originals and excluded source records"),
 ) -> None:
@@ -1059,21 +1057,21 @@ def benchmark_sync(
 
 @benchmark_app.command("run")
 def benchmark_run(
-    tasks: Optional[str] = typer.Option(None, "--tasks"),
+    tasks: str | None = typer.Option(None, "--tasks"),
     model: str = typer.Option("constant-reference", "--model"),
     registry: str = typer.Option("configs/models", "--registry"),
-    out: Optional[str] = typer.Option(None, "--out"),
+    out: str | None = typer.Option(None, "--out"),
     timeout: float = typer.Option(180.0, "--timeout"),
     resume: bool = typer.Option(True, "--resume/--no-resume"),
     image_source: str = typer.Option("s3", "--image-source", help="s3: verified cache; local: offline cache; none: no-image control"),
-    max_tasks: Optional[int] = typer.Option(None, "--max-tasks"),
-    max_cost: Optional[float] = typer.Option(None, "--max-cost"),
-    run_id: Optional[str] = typer.Option(None, "--run-id"),
+    max_tasks: int | None = typer.Option(None, "--max-tasks"),
+    max_cost: float | None = typer.Option(None, "--max-cost"),
+    run_id: str | None = typer.Option(None, "--run-id"),
     suite: str = typer.Option("species-id-v5", "--suite"),
     concurrency: int = typer.Option(4, "--concurrency"),
-    effort: Optional[str] = typer.Option(None, "--effort"),
-    seed: Optional[int] = typer.Option(None, "--seed", help="must match the seed of the frozen suite"),
-    model_seed: Optional[int] = typer.Option(None, "--model-seed", help="optional provider RNG seed, if supported"),
+    effort: str | None = typer.Option(None, "--effort"),
+    seed: int | None = typer.Option(None, "--seed", help="must match the seed of the frozen suite"),
+    model_seed: int | None = typer.Option(None, "--model-seed", help="optional provider RNG seed, if supported"),
     sample_seed: int = typer.Option(42, "--sample-seed", help="deterministic species-stratified task order"),
     rate_limit: float = typer.Option(0.0, "--rate-limit"),
     retries: int = typer.Option(3, "--retries"),
@@ -1083,15 +1081,16 @@ def benchmark_run(
     """Run a validated v5 snapshot; checkpoint provenance before any requests."""
     import datetime as dt
     import hashlib
-    import subprocess
     import shutil
+    import subprocess
+
     from spider_bench.benchmark.adapters import ConstantAdapter, PerfectAdapter
     from spider_bench.benchmark.prepare import validate_suite
     from spider_bench.benchmark.protocol import sample_tasks
-    from spider_bench.benchmark.runner import run_tasks
-    from spider_bench.benchmark.tasks import read_tasks, tasks_hash
     from spider_bench.benchmark.registry import load_registry, resolve_model
+    from spider_bench.benchmark.runner import run_tasks
     from spider_bench.benchmark.suite_storage import restore_suite, task_asset
+    from spider_bench.benchmark.tasks import read_tasks, tasks_hash
 
     if image_source not in {"s3", "local", "none"}:
         raise typer.BadParameter("image-source must be s3, local or none")
@@ -1170,7 +1169,7 @@ def benchmark_run(
     manifest = {"model_id": adapter.model_id, "suite": suite, "run_id": run_id,
                 "protocol_version": 5, "run_hash": run_hash, **fingerprint,
                 "tasks": len(rows), "status": "running", "condition": condition,
-                "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "started_at": dt.datetime.now(dt.UTC).isoformat(),
                 "git_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
                 "dirty_tree": bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())}
     if resolved:
@@ -1192,7 +1191,7 @@ def benchmark_run(
                         max_workers=concurrency, rate_limit=rate_limit, retries=retries)
     manifest.update({"status": "stopped" if summary.get("stopped_early") else "complete",
                      "usage": summary.get("usage", {}), "estimated_cost_usd": summary.get("estimated_cost_usd"),
-                     "summary": summary, "finished_at": dt.datetime.now(dt.timezone.utc).isoformat()})
+                     "summary": summary, "finished_at": dt.datetime.now(dt.UTC).isoformat()})
     manifest_path.write_text(json.dumps(manifest, indent=2))
     typer.echo(json.dumps(summary, indent=2))
 
@@ -1361,11 +1360,11 @@ def benchmark_models(
 
 @benchmark_app.command("score")
 def benchmark_score(
-    tasks: Optional[str] = typer.Option(None, "--tasks"),
-    predictions: Optional[str] = typer.Option(None, "--predictions"),
+    tasks: str | None = typer.Option(None, "--tasks"),
+    predictions: str | None = typer.Option(None, "--predictions"),
     suite: str = typer.Option("species-id-v5", "--suite"),
-    run_id: Optional[str] = typer.Option(None, "--run-id"),
-    out: Optional[str] = typer.Option(None, "--out", help="write scores.json here (default: beside predictions)"),
+    run_id: str | None = typer.Option(None, "--run-id"),
+    out: str | None = typer.Option(None, "--out", help="write scores.json here (default: beside predictions)"),
 ) -> None:
     """Score predictions against tasks (pure, offline). Paths resolve from --suite/--run-id."""
     from spider_bench.benchmark.runner import read_predictions
@@ -1401,7 +1400,7 @@ def benchmark_leaderboard(
     out: str = typer.Option("data/benchmarks/leaderboard.md", "--out"),
     suite: str = typer.Option("species-id-v5", "--suite"),
     condition: str = typer.Option("image", "--condition"),
-    task_hash: Optional[str] = typer.Option(None, "--tasks-hash", help="default: the full suite; use a hash to compare a pilot subset"),
+    task_hash: str | None = typer.Option(None, "--tasks-hash", help="default: the full suite; use a hash to compare a pilot subset"),
 ) -> None:
     """Render a static leaderboard from run dirs (each needs scores.json)."""
     from spider_bench.benchmark.leaderboard import collect_runs, render_leaderboard
@@ -1424,7 +1423,7 @@ def benchmark_leaderboard(
 @benchmark_app.command("report")
 def benchmark_report(
     run_id: str = typer.Option(..., "--run-id"),
-    tasks: Optional[str] = typer.Option(None, "--tasks"),
+    tasks: str | None = typer.Option(None, "--tasks"),
     suite: str = typer.Option("species-id-v5", "--suite"),
     runs_dir: str = typer.Option("data/benchmarks/runs", "--runs-dir"),
 ) -> None:
@@ -1432,19 +1431,10 @@ def benchmark_report(
     from spider_bench.benchmark.report import write_run_report
     from spider_bench.benchmark.tasks import read_tasks
 
-    fam: dict[str, str] = {}
-    try:
-        import pyarrow.parquet as pq
-
-        table = pq.read_table("data/releases/polish-spiders/0.5.0/taxa.parquet")
-        d = table.to_pylist()
-        fam = {r["taxon"]: r.get("family", "") for r in d}
-    except Exception:
-        pass
     run_dir = Path(runs_dir) / run_id
     snapshot = run_dir / "tasks.jsonl"
     task_path = snapshot if tasks is None and snapshot.exists() else _suite_tasks(suite, tasks)
-    out = write_run_report(run_dir, read_tasks(task_path), fam)
+    out = write_run_report(run_dir, read_tasks(task_path))
     typer.echo(f"wrote {out}")
 
 

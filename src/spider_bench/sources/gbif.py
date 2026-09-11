@@ -18,7 +18,13 @@ from typing import Any
 
 import httpx
 
-from spider_bench.sources.http import PageCursor, RateLimiter, apply_record_cap, fetch_json_async, fetch_json_sync
+from spider_bench.sources.http import (
+    PageCursor,
+    RateLimiter,
+    apply_record_cap,
+    fetch_json_async,
+    fetch_json_sync,
+)
 from spider_bench.storage.s3 import raw_metadata_key
 
 BASE_URL = "https://api.gbif.org/v1"

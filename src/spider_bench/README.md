@@ -15,16 +15,16 @@ spider-bench benchmark models
 
 Model settings live in [configs/models](../../configs/models). Export the matching credentials before running.
 
-| CLI model ID | Credentials | Optional overrides |
+| CLI model ID | Required setup | Optional overrides |
 | :--- | :--- | :--- |
-| `luna`, `terra`, `sol`, `astra` | `LUNA_API_KEY`, `TERRA_API_KEY`, `SOL_API_KEY`, `ASTRA_API_KEY` respectively | Matching `*_BASE_URL` and `*_MODEL` |
+| `luna`, `terra`, `sol`, `astra` | Matching `*_API_KEY` and `*_BASE_URL` (e.g. `LUNA_API_KEY`, `LUNA_BASE_URL`) | Matching `*_MODEL` deployment name |
 | `gemini` | `GEMINI_API_KEY` | `GEMINI_BASE_URL`, `GEMINI_MODEL` |
 | `deepseek`, `muse`, `grok`, `glm` | `OPENROUTER_API_KEY` | `OPENROUTER_BASE_URL`; `DEEPSEEK_MODEL`, `MUSE_MODEL`, `GROK_MODEL`, or `GLM_MODEL` |
 | `fable` | Standard AWS credential chain: environment, profile, SSO, or IAM role | `FABLE_REGION`, `FABLE_MODEL` |
 
-Azure configs point to the original experiment's resource. Set the matching
-`*_BASE_URL` and `*_MODEL` for your own Azure resource and deployment. Muse's Contributor tier
-requires accepting its provider data-use conditions in OpenRouter.
+For Azure, set `*_BASE_URL` to `https://YOUR-RESOURCE.openai.azure.com/openai/v1`
+and `*_MODEL` to your deployment name. For OpenAI, use `https://api.openai.com/v1`.
+Muse's Contributor tier requires accepting its provider data-use conditions in OpenRouter.
 
 The CLI reads environment variables; load `.env` files into your shell before running.
 

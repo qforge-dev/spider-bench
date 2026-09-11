@@ -77,13 +77,12 @@ def build_attribution(
 ) -> str:
     """Build required attribution text. Creator + license are mandatory.
 
-    Raises ValueError when creator or license is missing (gate §11: every
-    included image needs creator + license + attribution text).
+    Raises ValueError when creator or license is missing.
     """
     if not creator or not creator.strip():
-        raise ValueError("attribution requires creator (gate §11)")
+        raise ValueError("attribution requires creator")
     if not license_id or not license_id.strip():
-        raise ValueError("attribution requires a license identifier (gate §11)")
+        raise ValueError("attribution requires a license identifier")
     work = f"“{title}” by " if title and title.strip() else ""
     parts = [f"{work}{creator.strip()}"]
     lic = license_id.strip()

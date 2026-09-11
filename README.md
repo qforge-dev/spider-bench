@@ -101,3 +101,5 @@ Fortunately, we have a specialist for this.
 Species identification: inconclusive. Spider removal: enthusiastic.
 
 </details>
+
+Code: [MIT](LICENSE). Photos: [individual licenses and attribution](docs/licensing.md).

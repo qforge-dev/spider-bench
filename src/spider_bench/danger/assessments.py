@@ -116,12 +116,11 @@ def validate_assessment(
         if missing:
             raise ValueError(
                 f"assessment for {assessment.taxon!r}: unsupported evidence reference(s): "
-                f"{missing} (gate §11)"
+                f"{missing}"
             )
     if known_taxa is not None and assessment.taxon not in known_taxa:
         raise ValueError(
-            f"assessment for {assessment.taxon!r}: taxon absent from pinned taxonomy snapshot "
-            "(gate §11)"
+            f"assessment for {assessment.taxon!r}: taxon absent from pinned taxonomy snapshot"
         )
     return assessment
 

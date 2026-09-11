@@ -28,12 +28,15 @@ def load_registry(directory: str | Path = DEFAULT_DIR) -> dict[str, dict[str, An
 
 
 def resolve_model(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Resolve env-backed fields. Returns explisafe dict (no secret values)."""
+    """Resolve env-backed fields without including secret values."""
     key_env = cfg.get("api_key_env", "")
     if key_env and not os.environ.get(key_env):
         raise RuntimeError(f"missing required env var: {key_env} (model {cfg.get('id')})")
-    base = (os.environ.get(cfg.get("base_url_env", ""), "")
-            or cfg.get("base_url", "") or "https://api.openai.com/v1")
+    base_env = cfg.get("base_url_env", "")
+    base = os.environ.get(base_env, "") or cfg.get("base_url", "")
+    if base_env and not base:
+        raise RuntimeError(f"missing required env var: {base_env} (model {cfg.get('id')})")
+    base = base or "https://api.openai.com/v1"
     model = os.environ.get(cfg.get("model_env", ""), "") or cfg.get("model", "")
     return {"id": cfg.get("id"), "display_name": cfg.get("display_name", cfg.get("id")),
             "adapter": cfg.get("adapter", "openai-compatible"),

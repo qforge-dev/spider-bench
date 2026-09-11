@@ -18,7 +18,7 @@ def publish_results(local_dir: str | Path, *, bucket: str, suite: str, run_id: s
         try:
             s3.head_object(Bucket=bucket, Key=dest + "COMPLETE")
             raise ValueError(f"run already published (COMPLETE present): s3://{bucket}/{dest}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if "already published" in str(e):
                 raise
     keys = []

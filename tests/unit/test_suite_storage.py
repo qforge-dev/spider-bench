@@ -9,7 +9,12 @@ from PIL import Image
 from spider_bench.benchmark.prepare import validate_suite
 from spider_bench.benchmark.protocol import mixed_candidates, prepare_image
 from spider_bench.benchmark.suite_storage import (
-    build_publication, cached_object, digest, json_bytes, publish_suite, restore_suite,
+    build_publication,
+    cached_object,
+    digest,
+    json_bytes,
+    publish_suite,
+    restore_suite,
 )
 from spider_bench.benchmark.tasks import _prompts, tasks_hash
 

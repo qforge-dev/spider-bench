@@ -5,7 +5,7 @@ through a new version plus an appended review event.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -40,7 +40,7 @@ class ReviewEvent(BaseModel):
 
 
 def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def apply_transition(current: str, target: str) -> str:

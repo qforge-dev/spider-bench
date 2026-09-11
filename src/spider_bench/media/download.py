@@ -12,9 +12,10 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlparse
 
 DEFAULT_APPROVED_HOSTS = (
@@ -109,7 +110,7 @@ def ensure_queue_table(conn: sqlite3.Connection) -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def enqueue(conn: sqlite3.Connection, items: list[DownloadItem]) -> int:

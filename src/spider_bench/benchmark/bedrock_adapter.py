@@ -6,8 +6,8 @@ Bedrock client injectable for offline tests.
 """
 from __future__ import annotations
 
-from typing import Any
 import threading
+from typing import Any
 
 from spider_bench.benchmark.api_adapter import match_candidate
 
@@ -38,7 +38,6 @@ class BedrockAdapter:
         if self._client is not None:
             return self._client
         import boto3
-
         from botocore.config import Config
         return boto3.client("bedrock-runtime", region_name=self._cfg.get("region", "us-east-1"),
                             config=Config(read_timeout=self._cfg.get("timeout_s", 180),
@@ -99,7 +98,7 @@ class BedrockAdapter:
                 }} if self._cfg.get("reasoning_effort") else {}),
                 **extra,
             )
-        except Exception as e:  # noqa: BLE001 - surfaced per-row, with service detail
+        except Exception as e:
             raise RuntimeError(f"bedrock converse failed: {e}") from e
         blocks = resp.get("output", {}).get("message", {}).get("content", []) or []
         texts = [b.get("text", "") for b in blocks

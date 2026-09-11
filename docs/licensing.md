@@ -1,5 +1,7 @@
 # Photo licenses and attribution
 
+The repository's code is licensed under [MIT](../LICENSE). Photos and third-party source records retain their original terms; the MIT license does not replace them.
+
 The final benchmark retains the license and attribution recorded for each iNaturalist photo. The frozen task files contain these license counts:
 
 | Photo license | Published 2,000-photo comparison | Full 2,183-photo suite |

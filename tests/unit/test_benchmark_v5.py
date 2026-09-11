@@ -197,9 +197,9 @@ def test_budget_stop_drains_and_records_inflight_requests(tmp_path):
 
 def test_default_cli_validates_v5_even_when_legacy_query_exists(tmp_path, monkeypatch):
     from typer.testing import CliRunner
+
     from spider_bench import cli
-    from spider_bench.benchmark import prepare
-    from spider_bench.benchmark import suite_storage
+    from spider_bench.benchmark import prepare, suite_storage
     from spider_bench.config import CountryConfig
 
     monkeypatch.chdir(tmp_path)
@@ -226,6 +226,7 @@ def test_default_cli_validates_v5_even_when_legacy_query_exists(tmp_path, monkey
 
 def test_cli_rejects_unvalidated_sibling_tasks(tmp_path):
     from typer.testing import CliRunner
+
     from spider_bench.cli import app
 
     unvalidated = tmp_path / "different-tasks.jsonl"

@@ -6,15 +6,16 @@ never retry a completed invalid answer or a truncated completion for a better re
 from __future__ import annotations
 
 import concurrent.futures as _fut
-import json
 import hashlib
+import json
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from spider_bench.benchmark.tasks import tasks_hash
 from spider_bench.benchmark.protocol import response_status
+from spider_bench.benchmark.tasks import tasks_hash
 
 TRANSIENT_MARKERS = ("429", "500", "503", "502", "504", "timeout", "timed out", "connection reset",
                      "overloaded", "rate limit", "try again", "temporarily")
