@@ -1,4 +1,4 @@
-"""Only compare complete, execution-valid runs on identical tasks and conditions."""
+"""Show every scored run on identical tasks and conditions, including failures."""
 from __future__ import annotations
 
 import html
@@ -13,8 +13,6 @@ def collect_runs(runs_dir: str | Path) -> list[dict]:
             continue
         s = json.loads((d / "scores.json").read_text())
         m = json.loads((d / "manifest.json").read_text())
-        if m.get("protocol_version") != 5 or m.get("status") != "complete" or not s.get("execution_valid"):
-            continue
         if s.get("tasks_hash") != m.get("tasks_hash"):
             raise ValueError(f"score/manifest mismatch: {d.name}")
         out.append({"run_id": d.name, "manifest": m, "scores": s})
@@ -32,13 +30,16 @@ def render_leaderboard(runs: list[dict]) -> tuple[str, list[dict]]:
         "top1": r["scores"].get("top1", 0.0),
         "macro_species_top1": r["scores"].get("macro_species_top1"),
         "answer_rate": r["scores"].get("answer_rate"), "errors": r["scores"].get("errors", 0),
+        "status": r["manifest"].get("status", "unknown"),
+        "execution_valid": r["scores"].get("execution_valid"),
         "cost_usd": r["manifest"].get("estimated_cost_usd")
     } for r in runs], key=lambda r: r["top1"], reverse=True)
-    lines = ["# Benchmark results", "", "Descriptive scores; differences do not establish statistical significance.", "",
-             "| rank | run | model | effort | tasks | top-1 | failures | estimated USD |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    lines = ["# Benchmark results", "", "All scored runs on the selected task snapshot and input condition, including runs with failures.", "",
+             "Descriptive scores; differences do not establish statistical significance.", "",
+             "| rank | run | model | effort | status | tasks | top-1 | failures | estimated USD |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for i, r in enumerate(rows, 1):
-        lines.append(f"| {i} | {r['run_id']} | {r['model']} | {r['effort']} | {r['tasks']} | "
+        lines.append(f"| {i} | {r['run_id']} | {r['model']} | {r['effort']} | {r['status']} | {r['tasks']} | "
                      f"{r['top1']:.4f} | {r['errors']} | {r['cost_usd']} |")
     return "\n".join(lines) + "\n", rows
 
@@ -52,12 +53,12 @@ def render_page(runs: list[dict], title: str = "Spider benchmark results") -> st
                     f'{html.escape(str(row["effort"]))}</text><rect x="160" y="{y}" '
                     f'width="{400*row["top1"]}" height="20" fill="#2563eb"/>'
                     f'<text x="{165+400*row["top1"]}" y="{y+14}">{row["top1"]:.3f}</text>')
-    body = "".join(f'<tr><td>{html.escape(row["run_id"])}</td><td>{row["tasks"]}</td>'
+    body = "".join(f'<tr><td>{html.escape(row["run_id"])}</td><td>{html.escape(row["status"])}</td><td>{row["tasks"]}</td>'
                    f'<td>{row["top1"]:.4f}</td><td>{row["errors"]}</td></tr>' for row in rows)
     return (f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
             '<style>body{font-family:system-ui;max-width:1000px;margin:auto;padding:24px}'
             'td,th{padding:8px;text-align:left}</style></head><body>'
-            f'<h1>{html.escape(title)}</h1><p>Complete runs, identical task snapshots and input conditions. '
+            f'<h1>{html.escape(title)}</h1><p>All scored runs on the selected task snapshot and input condition, including runs with failures. '
             'Ranking is descriptive, not a significance test.</p><svg width="650" height="'
-            f'{max(70,60+len(rows)*32)}">{"".join(bars)}</svg><table><tr><th>Run</th><th>Tasks</th>'
+            f'{max(70,60+len(rows)*32)}">{"".join(bars)}</svg><table><tr><th>Run</th><th>Status</th><th>Tasks</th>'
             f'<th>Top-1</th><th>Failures</th></tr>{body}</table></body></html>')

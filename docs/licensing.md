@@ -1,18 +1,16 @@
-# Licensing
+# Photo licenses and attribution
 
-Profiles: `configs/license-profiles.yaml` (versioned; version stored in release.json).
+The final benchmark retains the license and attribution recorded for each iNaturalist photo. The frozen task files contain these license counts:
 
-- `conservative`: CC0-1.0, CC-BY-4.0, CC-BY-3.0.
-- `research` (Poland default): + CC-BY-NC-4.0/3.0; CC-BY-SA-*/CC-BY-NC-SA-*
-  need a documented decision (`license_review_ok`) before inclusion (ShareAlike).
-- Reject: unknown, all-rights-reserved, transformation-incompatible.
+| Photo license | Published 2,000-photo comparison | Full 2,183-photo suite |
+| :--- | ---: | ---: |
+| [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) | 1,586 | 1,739 |
+| [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 377 | 405 |
+| [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | 37 | 39 |
+| **Total** | **2,000** | **2,183** |
 
-Every accepted image needs: relative S3 media key + SHA-256, source record + URLs,
-creator, license id + URL, attribution text, source snapshot id. Decisions are
-frozen at release time (don't rely on live source state).
+The task's `meta.license`, `meta.attribution`, and `meta.source_url` identify the recorded terms, photo credit, and original observation. Source observation responses and original images are preserved with checksums, so the benchmark's provenance does not depend on a live page remaining unchanged. See the [dataset commands](../src/spider_bench/README.md#dataset-commands).
 
-Helpers (`licensing.py`): `is_accepted`, `review_required`, `classify_license`
--> `accepted|review_required|rejected`, `build_attribution(creator, license_id, ...)`.
+CC BY and CC BY-NC photos require attribution, a license link, and an indication of changes when reused. CC BY-NC also restricts commercial use. The repository does not replace these per-photo terms with a single unrestricted image license. Refer to the linked licenses and each photo's source record when redistributing images.
 
-CLI: `spider-bench audit licenses [--input candidates.json]`,
-`spider-bench media select --input ...` (caps + license filter).
+The benchmark's prepared copies apply EXIF orientation, remove metadata, resize within the documented limits, and encode as JPEG. Preserve the source credit and identify these changes when reusing a prepared copy. The detailed [image-processing policy](benchmark-v5.md#images-and-labels) describes those transformations.

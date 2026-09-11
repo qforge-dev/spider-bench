@@ -215,6 +215,33 @@ def test_leaderboard_sorts_by_top1(tmp_path):
     assert "| 1 | r-good |" in md
 
 
+def test_leaderboard_keeps_failed_and_incomplete_runs(tmp_path):
+    import json
+
+    from spider_bench.benchmark.leaderboard import collect_runs, render_leaderboard, render_page
+
+    for run_id, status in (("failed-requests", "complete"), ("partial-run", "stopped")):
+        run = tmp_path / run_id
+        run.mkdir()
+        (run / "manifest.json").write_text(json.dumps({
+            "model_id": run_id, "protocol_version": 5, "status": status,
+            "tasks_hash": "same-tasks", "condition": "image",
+        }))
+        (run / "scores.json").write_text(json.dumps({
+            "tasks": 2000, "top1": 0.4, "errors": 3, "execution_valid": False,
+            "tasks_hash": "same-tasks", "complete": status == "complete",
+        }))
+
+    runs = collect_runs(tmp_path)
+    markdown, rows = render_leaderboard(runs)
+    page = render_page(runs)
+    assert {row["run_id"] for row in rows} == {"failed-requests", "partial-run"}
+    assert all(row["execution_valid"] is False and row["errors"] == 3 for row in rows)
+    for row in rows:
+        assert row["run_id"] in markdown and row["run_id"] in page
+        assert row["status"] in markdown and row["status"] in page
+
+
 def test_match_rejects_ambiguous_prose():
     from spider_bench.benchmark.api_adapter import match_candidate
 

@@ -9,6 +9,8 @@
     "macro_species_top1": 0.4710630899155489,
     "answer_rate": 0.998,
     "errors": 4,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 27.1136
   },
   {
@@ -21,7 +23,37 @@
     "macro_species_top1": 0.46410829607550924,
     "answer_rate": 1.0,
     "errors": 0,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 8.6643
+  },
+  {
+    "run_id": "astra-20260911-094235",
+    "model": "astra",
+    "effort": "medium",
+    "suite": "species-id-v5",
+    "tasks": 2000,
+    "top1": 0.477,
+    "macro_species_top1": 0.4495777446597119,
+    "answer_rate": 0.9985,
+    "errors": 3,
+    "status": "complete",
+    "execution_valid": false,
+    "cost_usd": 56.6341
+  },
+  {
+    "run_id": "astra-20260911-151008",
+    "model": "astra",
+    "effort": "high",
+    "suite": "species-id-v5",
+    "tasks": 2000,
+    "top1": 0.475,
+    "macro_species_top1": 0.44572776949826126,
+    "answer_rate": 0.998,
+    "errors": 4,
+    "status": "complete",
+    "execution_valid": false,
+    "cost_usd": 97.5297
   },
   {
     "run_id": "fable-20260910-212610",
@@ -33,6 +65,8 @@
     "macro_species_top1": 0.40126676602086436,
     "answer_rate": 0.999,
     "errors": 2,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 54.1908
   },
   {
@@ -45,6 +79,8 @@
     "macro_species_top1": 0.3919523099850969,
     "answer_rate": 0.9985,
     "errors": 3,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 33.6515
   },
   {
@@ -57,6 +93,8 @@
     "macro_species_top1": 0.3645057128663686,
     "answer_rate": 1.0,
     "errors": 0,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 0.9306
   },
   {
@@ -69,6 +107,8 @@
     "macro_species_top1": 0.35581222056631895,
     "answer_rate": 1.0,
     "errors": 0,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 0.7872
   },
   {
@@ -81,6 +121,8 @@
     "macro_species_top1": 0.338301043219076,
     "answer_rate": 0.9985,
     "errors": 3,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 1.4589
   },
   {
@@ -93,6 +135,8 @@
     "macro_species_top1": 0.3152011922503726,
     "answer_rate": 0.9995,
     "errors": 1,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 42.8857
   },
   {
@@ -105,7 +149,23 @@
     "macro_species_top1": 0.30191256830601093,
     "answer_rate": 0.9995,
     "errors": 1,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 25.892
+  },
+  {
+    "run_id": "deepseek-20260910-225059",
+    "model": "deepseek",
+    "effort": "high",
+    "suite": "species-id-v5",
+    "tasks": 2000,
+    "top1": 0.264,
+    "macro_species_top1": 0.2364629905613512,
+    "answer_rate": 0.954,
+    "errors": 92,
+    "status": "complete",
+    "execution_valid": false,
+    "cost_usd": 8.521
   },
   {
     "run_id": "terra-20260910-212630",
@@ -117,6 +177,8 @@
     "macro_species_top1": 0.21373571783407846,
     "answer_rate": 1.0,
     "errors": 0,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 14.3725
   },
   {
@@ -129,6 +191,8 @@
     "macro_species_top1": 0.20876800794833583,
     "answer_rate": 1.0,
     "errors": 0,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 20.5284
   },
   {
@@ -141,6 +205,8 @@
     "macro_species_top1": 0.20106805762543467,
     "answer_rate": 0.976,
     "errors": 48,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 1.4351
   },
   {
@@ -153,6 +219,8 @@
     "macro_species_top1": 0.19262295081967212,
     "answer_rate": 0.9775,
     "errors": 45,
+    "status": "complete",
+    "execution_valid": true,
     "cost_usd": 4.9898
   }
 ]

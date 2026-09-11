@@ -2,7 +2,7 @@
 
 [Back to repository](../../README.md)
 
-Spider Bench is a Python CLI for preparing, running, and scoring spider
+Spider Bench is a Python CLI for running and scoring spider
 identification benchmarks. Run the commands below **from the repository root**,
 not from this package directory. Python **3.12 or newer** is required.
 
@@ -52,22 +52,13 @@ Use a new run ID for each new experiment. Check `status_counts`, `execution_vali
 token usage, and estimated cost before starting a larger run. A successfully
 parsed species name is not necessarily the correct answer.
 
-The default suite is **species-id-v5**. A normal run automatically restores the
-frozen suite from public S3 and verifies source records and images before sending
-requests. The first cache verification can take a while; it checks 4,366 assets.
-Reading the public dataset does not require AWS credentials. Provider inference
-still requires the credentials above.
-
-For explicit restoration or offline use:
+## Dataset commands
 
 ```bash
 spider-bench benchmark sync --suite species-id-v5
 spider-bench benchmark validate --suite species-id-v5
+spider-bench benchmark sync --suite species-id-v5 --archive
 ```
-
-After the cache is complete, `run --image-source local` uses it without downloading
-images. `--cache-dir` chooses a different cache location. `sync --archive` also
-downloads original photos and excluded source records.
 
 ## Reproduce the published 2,000-photo setup
 
@@ -93,6 +84,10 @@ spider-bench benchmark leaderboard \
 **Do not omit `--max-tasks 2000` when comparing with the published runs.** Omitting
 it selects all 2,183 suite rows and produces a different task hash. The explicit
 leaderboard hash above selects the published 2,000-row comparison.
+
+The leaderboard includes every scored run in that comparison, including runs with
+request errors, invalid responses, or other execution issues. It keeps separate
+rows for each run and shows their status and failure counts.
 
 The CLI supports `--effort low`, `medium`, and `high`; provider support varies.
 DeepSeek uses `high` in the published run. Effort names do not mean equal compute
@@ -127,76 +122,17 @@ configuration. Resume is enabled by default and skips saved rows. Changing the
 budget, concurrency, model settings, task snapshot, or benchmark code changes the
 run fingerprint and is rejected. Completed runs require a new run ID to rerun.
 
-An execution-valid run is complete, has no unresolved transport errors, and has
-finish reasons. Model-answer failures still count against its accuracy. Completed
-runs failing this validation remain inspectable but are not ranked.
+Saved execution-validity flags describe completion, unresolved transport errors,
+and available finish reasons. They do not filter the published leaderboard: all
+16 runs remain included, and failures count against accuracy.
 
 For a no-image control, use a new run ID and add `--image-source none` to the same
 command. Compare it separately with `benchmark leaderboard --condition no_image`
 and the same task hash.
 
-## Storage and sharing
+Photo attribution and licenses are preserved in the tasks. See
+[licensing](../../docs/licensing.md) for the terms recorded for these images.
 
-S3 is the permanent dataset store:
-
-```text
-s3://spiders-dataset-088543363904/
-  poland/media/sha256/                 # prepared photos
-  poland/benchmarks/species-id-v5/      # frozen suite and source evidence
-  poland/releases/                     # immutable dataset releases
-```
-
-Local images and source records use the disposable, checksum-verified cache in
-`data/work/benchmark-s3-cache/`. The local SQLite index is
-`data/work/spider-bench.sqlite`. These remain ignored by Git.
-
-Git tracks the reviewed result files listed above and
-`data/benchmarks/leaderboard.{md,json,html}`. Stage **completed runs explicitly**;
-do not include a run that is still being written. Environment files, credentials,
-private keys, logs, backups, source archives, and caches stay out of commits.
-Endpoint addresses and public dataset URLs are intentional. Scan new artifacts
-and Git history for secrets before sharing, including provider error messages.
-
-`benchmark publish` can archive a run to S3; inspect `--help` and use `--dry-run`
-first. S3 writes require AWS credentials and never change bucket permissions.
-Image attribution and licenses are preserved in the tasks; see
-[licensing](../../docs/licensing.md) before redistributing source photos.
-
-## Dataset preparation and other commands
-
-The collection pipeline has additional setup requirements. These commands can
-access AWS services and, where applicable, write data:
-
-```bash
-spider-bench init --config configs/poland.yaml
-spider-bench status
-spider-bench doctor
-```
-
-| Command group | Purpose |
-| :--- | :--- |
-| `taxonomy collect`, `taxonomy reconcile` | Collect and reconcile taxonomic names |
-| `discover inaturalist`, `discover gbif`, `discover commons` | Discover candidate records |
-| `audit coverage`, `audit licenses`, `audit taxonomy` | Review coverage, licenses, and taxonomy |
-| `media collect-one`, `collect-n`, `gap-fill`, `select`, `download`, `validate`, `deduplicate` | Collect and prepare source images |
-| `danger evidence`, `danger assessments`, `danger audit` | Manage danger-assessment evidence and reviews |
-| `release build`, `release verify`, `release publish` | Build and publish dataset releases |
-| `benchmark prepare`, `publish-suite`, `sync`, `validate` | Prepare, publish, restore, and validate frozen benchmark suites |
-
-Use `<command> --help` to check its options. Use `--dry-run` where supported;
-it is not available on every command. Always give a changed dataset a new suite
-name, preserving the published v5 suite.
-
-For the local dataset browser:
-
-```bash
-pip install -e ".[app]"
-python -m app.app
-```
-
-Open `http://127.0.0.1:5000` after setting up its local dataset index.
-
-[Full benchmark protocol](../../docs/benchmark-v5.md) ·
-[S3 layout](../../docs/s3-layout.md) ·
-[Local operations](../../docs/local-operations.md) ·
-[Architecture](../../docs/architecture.md)
+[Benchmark documentation](../../docs/README.md) ·
+[Full benchmark methodology](../../docs/benchmark-v5.md) ·
+[Data sources](../../docs/data-sources.md)
